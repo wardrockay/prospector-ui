@@ -90,6 +90,11 @@
             {% endif %}
         </dd>
         
+        {% if draft.x_external_id %}
+        <dt>ID Externe (Pharow) :</dt>
+        <dd><code>{{ draft.x_external_id }}</code></dd>
+        {% endif %}
+        
         <dt>ID du draft :</dt>
         <dd><code>{{ draft.id }}</code></dd>
     </dl>
@@ -101,6 +106,12 @@
     
     <div class="actions">
         <button type="button" class="btn btn-success" onclick="showConfirm()">✅ Envoyer ce mail</button>
+        
+        {% if draft.x_external_id %}
+        <form method="POST" action="{{ url_for('regenerate_draft', draft_id=draft.id) }}" style="display: inline;">
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Régénérer ce mail depuis Odoo ? Un nouveau draft sera créé.')">🔄 Régénérer</button>
+        </form>
+        {% endif %}
         
         <form method="POST" action="{{ url_for('reject_draft', draft_id=draft.id) }}" style="display: inline;">
             <button type="submit" class="btn btn-danger" onclick="return confirm('Êtes-vous sûr de vouloir rejeter ce draft ?')">❌ Rejeter</button>
