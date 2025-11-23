@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Historique - Prospector{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 20px;">✅ Emails envoyés</h2>
+    
+    {% if sent_drafts %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date d'envoi</th>
+                    <th>Destinataire</th>
+                    <th>Sujet</th>
+                    <th>Message ID</th>
+                    <th>Pixel ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for draft in sent_drafts %}
+                <tr>
+                    <td>
+                        {% if draft.sent_at %}
+                            {{ draft.sent_at.strftime('%d/%m/%Y %H:%M') if draft.sent_at is not string else draft.sent_at }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ draft.to }}</td>
+                    <td>{{ draft.subject }}</td>
+                    <td><code style="font-size: 11px;">{{ draft.message_id[:20] if draft.message_id else '-' }}...</code></td>
+                    <td><code style="font-size: 11px;">{{ draft.pixel_id[:20] if draft.pixel_id else '-' }}...</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty-state">
+            <p>Aucun email envoyé pour le moment</p>
+        </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 20px;">❌ Drafts rejetés</h2>
+    
+    {% if rejected_drafts %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date de rejet</th>
+                    <th>Date de création</th>
+                    <th>Destinataire</th>
+                    <th>Sujet</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for draft in rejected_drafts %}
+                <tr>
+                    <td>
+                        {% if draft.rejected_at %}
+                            {{ draft.rejected_at.strftime('%d/%m/%Y %H:%M') if draft.rejected_at is not string else draft.rejected_at }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if draft.created_at %}
+                            {{ draft.created_at.strftime('%d/%m/%Y %H:%M') if draft.created_at is not string else draft.created_at }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ draft.to }}</td>
+                    <td>{{ draft.subject }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty-state">
+            <p>Aucun draft rejeté pour le moment</p>
+        </div>
+    {% endif %}
+</div>
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour aux drafts en attente</a>
+</div>
+{% endblock %}

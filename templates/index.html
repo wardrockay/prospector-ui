@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Drafts en attente - Prospector{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 20px;">📬 Drafts en attente de review</h2>
+    
+    {% if drafts %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date de création</th>
+                    <th>Destinataire</th>
+                    <th>Sujet</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for draft in drafts %}
+                <tr>
+                    <td>
+                        {% if draft.created_at %}
+                            {{ draft.created_at.strftime('%d/%m/%Y %H:%M') if draft.created_at is not string else draft.created_at }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ draft.to }}</td>
+                    <td>{{ draft.subject }}</td>
+                    <td>
+                        <span class="badge badge-{{ draft.status }}">{{ draft.status }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('view_draft', draft_id=draft.id) }}" class="btn btn-primary">Voir détails</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <h3>Aucun draft en attente</h3>
+            <p>Tous les drafts ont été traités ✨</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
