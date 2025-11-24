@@ -233,7 +233,7 @@ def reject_draft(draft_id):
 
 @app.route("/edit/<draft_id>", methods=["POST"])
 def edit_draft(draft_id):
-    """Modifie le sujet et le corps d'un draft."""
+    """Crée une nouvelle version du draft avec les modifications manuelles."""
     try:
         # Récupérer les données du formulaire
         new_subject = request.form.get("subject", "").strip()
@@ -243,7 +243,7 @@ def edit_draft(draft_id):
             flash("Le sujet et le corps du message ne peuvent pas être vides", "error")
             return redirect(url_for("view_draft", draft_id=draft_id))
         
-        # Récupérer le draft
+        # Récupérer le draft original
         doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
         doc = doc_ref.get()
         
@@ -251,16 +251,32 @@ def edit_draft(draft_id):
             flash("Draft non trouvé", "error")
             return redirect(url_for("index"))
         
-        # Mettre à jour le draft
-        doc_ref.update({
+        original_data = doc.to_dict()
+        
+        # Créer une nouvelle version avec les modifications
+        new_draft_data = {
+            "to": original_data.get("to"),
             "subject": new_subject,
             "body": new_body,
-            "edited_at": datetime.utcnow(),
-            "manually_edited": True
-        })
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+            "x_external_id": original_data.get("x_external_id"),
+            "version_group_id": original_data.get("version_group_id"),
+            "odoo_id": original_data.get("odoo_id"),
+            "manually_edited": True,
+            "edited_from_draft_id": draft_id
+        }
         
-        flash("Draft modifié avec succès", "success")
-        return redirect(url_for("view_draft", draft_id=draft_id))
+        # Ajouter contact_info si présent
+        if "contact_info" in original_data:
+            new_draft_data["contact_info"] = original_data["contact_info"]
+        
+        # Créer le nouveau draft
+        new_draft_ref = db.collection(DRAFT_COLLECTION).add(new_draft_data)
+        new_draft_id = new_draft_ref[1].id
+        
+        flash("Nouvelle version du draft créée avec vos modifications", "success")
+        return redirect(url_for("view_draft", draft_id=new_draft_id))
     
     except Exception as e:
         flash(f"Erreur lors de la modification: {str(e)}", "error")
