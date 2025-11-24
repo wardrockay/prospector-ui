@@ -13,6 +13,7 @@
                     <th>Date de création</th>
                     <th>Destinataire</th>
                     <th>Sujet</th>
+                    <th>Versions</th>
                     <th>Statut</th>
                     <th>Actions</th>
                 </tr>
@@ -29,6 +30,13 @@
                     </td>
                     <td>{{ draft.to }}</td>
                     <td>{{ draft.subject }}</td>
+                    <td>
+                        {% if draft.version_count and draft.version_count > 1 %}
+                            <span class="badge badge-info" style="background-color: #3498db; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">{{ draft.version_count }}</span>
+                        {% else %}
+                            <span style="color: #95a5a6;">1</span>
+                        {% endif %}
+                    </td>
                     <td>
                         <span class="badge badge-{{ draft.status }}">{{ draft.status }}</span>
                     </td>

@@ -24,12 +24,40 @@ def index():
     try:
         # Récupérer tous les drafts avec status "pending"
         drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "pending").order_by("created_at", direction=firestore.Query.DESCENDING)
-        drafts = []
+        
+        # Grouper les drafts par version_group_id
+        grouped_drafts = {}
         
         for doc in drafts_ref.stream():
             draft_data = doc.to_dict()
             draft_data["id"] = doc.id
-            drafts.append(draft_data)
+            
+            # Utiliser version_group_id comme clé, ou l'id du document si pas de groupe
+            group_key = draft_data.get("version_group_id", doc.id)
+            
+            if group_key not in grouped_drafts:
+                grouped_drafts[group_key] = {
+                    "versions": [],
+                    "latest": None
+                }
+            
+            grouped_drafts[group_key]["versions"].append(draft_data)
+        
+        # Pour chaque groupe, identifier la version la plus récente
+        drafts = []
+        for group_key, group_data in grouped_drafts.items():
+            versions = group_data["versions"]
+            # Trier par date de création (la plus récente en premier)
+            versions.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
+            
+            latest = versions[0]
+            latest["version_count"] = len(versions)
+            latest["all_version_ids"] = [v["id"] for v in versions]
+            
+            drafts.append(latest)
+        
+        # Trier les drafts par date de création
+        drafts.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
         
         return render_template("index.html", drafts=drafts)
     
