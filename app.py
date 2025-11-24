@@ -3,6 +3,8 @@ import requests
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from google.cloud import firestore
+import google.auth
+from google.auth.transport.requests import Request as GoogleRequest
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
@@ -19,6 +21,52 @@ AUTO_FOLLOWUP_URL = os.environ.get("AUTO_FOLLOWUP_URL", "").rstrip("/")
 ODOO_DB_URL = os.environ.get("ODOO_DB_URL", "").rstrip("/")
 ODOO_SECRET = os.environ.get("ODOO_SECRET", "")
 MAIL_WRITER_URL = os.environ.get("MAIL_WRITER_URL", "").rstrip("/")
+
+
+def get_id_token(target_audience: str) -> str:
+    """
+    Génère un ID token pour authentifier les appels vers d'autres services Cloud Run.
+    Utilise le service account associé à ce Cloud Run.
+    """
+    try:
+        credentials, project_id = google.auth.default()
+        
+        # Rafraîchir les credentials pour obtenir un ID token
+        credentials.refresh(GoogleRequest())
+        
+        # Si les credentials supportent ID token (cas des services Cloud Run)
+        if hasattr(credentials, 'id_token'):
+            return credentials.id_token
+        
+        # Sinon, utiliser l'API IAMCredentials pour générer un ID token
+        # Récupérer le service account email
+        sa_email = credentials.service_account_email if hasattr(credentials, 'service_account_email') else None
+        
+        if not sa_email:
+            # Fallback: utiliser le service account par défaut
+            sa_email = "prospector-ui-sa@handy-resolver-477513-a1.iam.gserviceaccount.com"
+        
+        # Générer l'ID token via IAMCredentials API
+        url = f"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{sa_email}:generateIdToken"
+        
+        headers = {
+            "Authorization": f"Bearer {credentials.token}",
+            "Content-Type": "application/json",
+        }
+        
+        payload = {
+            "audience": target_audience,
+            "includeEmail": True
+        }
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        return response.json()["token"]
+        
+    except Exception as e:
+        print(f"[ERROR] Erreur génération ID token: {e}")
+        raise
 
 
 @app.route("/")
@@ -118,10 +166,14 @@ def send_draft(draft_id):
             flash("Service d'envoi non configuré (SEND_MAIL_SERVICE_URL manquant)", "error")
             return redirect(url_for("view_draft", draft_id=draft_id))
         
+        # Générer l'ID token pour authentifier l'appel
+        id_token = get_id_token(SEND_MAIL_SERVICE_URL)
+        
         # Appeler le service send_mail
         response = requests.post(
             f"{SEND_MAIL_SERVICE_URL}/send-draft",
             json={"draft_id": draft_id},
+            headers={"Authorization": f"Bearer {id_token}"},
             timeout=30
         )
         
