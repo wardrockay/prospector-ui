@@ -10,6 +10,40 @@
         margin-bottom: 20px;
     }
     
+    .version-selector {
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #f0f7ff;
+        border: 1px solid #3498db;
+        border-radius: 4px;
+    }
+    
+    .version-selector label {
+        font-weight: 600;
+        margin-right: 10px;
+        color: #2c3e50;
+    }
+    
+    .version-selector select {
+        padding: 8px 12px;
+        border: 1px solid #3498db;
+        border-radius: 4px;
+        font-size: 14px;
+        background-color: white;
+        cursor: pointer;
+    }
+    
+    .version-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        background-color: #3498db;
+        color: white;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+    
     .draft-info {
         display: grid;
         grid-template-columns: 150px 1fr;
@@ -70,9 +104,32 @@
     <div class="draft-header">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h2>📧 Détails du draft</h2>
-            <span class="badge badge-{{ draft.status }}">{{ draft.status }}</span>
+            <div>
+                <span class="badge badge-{{ draft.status }}">{{ draft.status }}</span>
+                {% if versions|length > 1 %}
+                <span class="version-badge">{{ versions|length }} version{% if versions|length > 1 %}s{% endif %}</span>
+                {% endif %}
+            </div>
         </div>
     </div>
+    
+    {% if versions|length > 1 %}
+    <div class="version-selector">
+        <label for="versionSelect">📋 Sélectionner une version :</label>
+        <select id="versionSelect" onchange="changeVersion(this.value)">
+            {% for version in versions %}
+            <option value="{{ version.id }}" {% if version.is_current %}selected{% endif %}>
+                Version {{ version.version_number }} - 
+                {% if version.created_at %}
+                    {{ version.created_at.strftime('%d/%m/%Y %H:%M') if version.created_at is not string else version.created_at }}
+                {% else %}
+                    -
+                {% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
     
     <dl class="draft-info">
         <dt>Destinataire :</dt>
@@ -138,6 +195,10 @@
     
     function hideConfirm() {
         document.getElementById('confirmSend').classList.remove('show');
+    }
+    
+    function changeVersion(draftId) {
+        window.location.href = '/draft/' + draftId;
     }
 </script>
 {% endblock %}

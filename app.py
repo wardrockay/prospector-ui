@@ -52,7 +52,27 @@ def view_draft(draft_id):
         draft_data = doc.to_dict()
         draft_data["id"] = doc.id
         
-        return render_template("draft_detail.html", draft=draft_data)
+        # Récupérer toutes les versions de ce draft (même version_group_id)
+        versions = []
+        version_group_id = draft_data.get("version_group_id")
+        
+        if version_group_id:
+            # Récupérer tous les drafts avec le même version_group_id et status pending
+            versions_ref = db.collection(DRAFT_COLLECTION).where("version_group_id", "==", version_group_id).where("status", "==", "pending").order_by("created_at")
+            
+            for idx, version_doc in enumerate(versions_ref.stream()):
+                version_data = version_doc.to_dict()
+                version_data["id"] = version_doc.id
+                version_data["version_number"] = idx + 1
+                version_data["is_current"] = version_doc.id == draft_id
+                versions.append(version_data)
+        
+        # Si aucune version trouvée (pas de version_group_id), utiliser juste ce draft
+        if not versions:
+            draft_data["version_number"] = 1
+            versions = [draft_data]
+        
+        return render_template("draft_detail.html", draft=draft_data, versions=versions)
     
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
@@ -127,6 +147,7 @@ def regenerate_draft(draft_id):
         
         draft_data = doc.to_dict()
         x_external_id = draft_data.get("x_external_id")
+        version_group_id = draft_data.get("version_group_id")  # Récupérer le version_group_id
         
         if not x_external_id:
             flash("Impossible de régénérer: x_external_id manquant", "error")
@@ -187,7 +208,8 @@ def regenerate_draft(draft_id):
             "partner_name": lead.get("partner_name", ""),
             "function": lead.get("function", ""),
             "description": lead.get("description", ""),
-            "x_external_id": x_external_id
+            "x_external_id": x_external_id,
+            "version_group_id": version_group_id  # Garder le même groupe de versions
         }
         
         print(f"[DEBUG] Appel mail_writer avec: {mail_writer_payload}")
@@ -197,17 +219,11 @@ def regenerate_draft(draft_id):
         
         print(f"[DEBUG] Réponse mail_writer: {mail_writer_data}")
         
-        # 3. Supprimer l'ancien draft (optionnel, on peut aussi le marquer comme "regenerated")
-        doc_ref.update({
-            "status": "regenerated",
-            "regenerated_at": datetime.utcnow()
-        })
-        
-        # 4. Récupérer le nouveau draft_id depuis la réponse
+        # Récupérer le nouveau draft_id depuis la réponse
         new_draft_id = mail_writer_data.get("draft", {}).get("draft_id")
         
         if new_draft_id:
-            flash(f"Mail régénéré avec succès!", "success")
+            flash(f"Nouvelle version du mail générée avec succès!", "success")
             return redirect(url_for("view_draft", draft_id=new_draft_id))
         else:
             flash("Mail régénéré mais impossible de récupérer le nouveau draft", "warning")
