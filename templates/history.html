@@ -13,8 +13,10 @@
                     <th>Date d'envoi</th>
                     <th>Destinataire</th>
                     <th>Sujet</th>
-                    <th>Message ID</th>
-                    <th>Pixel ID</th>
+                    <th>📭 Ouvert</th>
+                    <th>💬 Réponse</th>
+                    <th>🔄 Relances</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -29,8 +31,48 @@
                     </td>
                     <td>{{ draft.to }}</td>
                     <td>{{ draft.subject }}</td>
-                    <td><code style="font-size: 11px;">{{ draft.message_id[:20] if draft.message_id else '-' }}...</code></td>
-                    <td><code style="font-size: 11px;">{{ draft.pixel_id[:20] if draft.pixel_id else '-' }}...</code></td>
+                    <td>
+                        {% if draft.open_count and draft.open_count > 0 %}
+                            <span style="color: #27ae60; font-weight: bold;">
+                                ✓ {{ draft.open_count }}x
+                            </span>
+                            {% if draft.first_opened_at %}
+                                <br><small style="color: #7f8c8d;">{{ draft.first_opened_at.strftime('%d/%m %H:%M') if draft.first_opened_at is not string else draft.first_opened_at }}</small>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: #95a5a6;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if draft.has_reply %}
+                            <span style="color: #27ae60; font-weight: bold;">✓ Oui</span>
+                            {% if draft.reply_received_at %}
+                                <br><small style="color: #7f8c8d;">{{ draft.reply_received_at.strftime('%d/%m %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}</small>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: #95a5a6;">Non</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if draft.total_followups and draft.total_followups > 0 %}
+                            <div style="font-size: 12px;">
+                                {% if draft.sent_followups and draft.sent_followups > 0 %}
+                                    <span style="color: #27ae60;">✓ {{ draft.sent_followups }} envoyée(s)</span><br>
+                                {% endif %}
+                                {% if draft.scheduled_followups and draft.scheduled_followups > 0 %}
+                                    <span style="color: #f39c12;">⏱ {{ draft.scheduled_followups }} planifiée(s)</span><br>
+                                {% endif %}
+                                {% if draft.cancelled_followups and draft.cancelled_followups > 0 %}
+                                    <span style="color: #95a5a6;">✗ {{ draft.cancelled_followups }} annulée(s)</span>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <span style="color: #95a5a6;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('view_sent_draft', draft_id=draft.id) }}" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">👁️ Détails</a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

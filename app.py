@@ -12,7 +12,10 @@ db = firestore.Client()
 
 # Configuration
 DRAFT_COLLECTION = os.environ.get("DRAFT_COLLECTION", "email_drafts")
+FOLLOWUP_COLLECTION = os.environ.get("FOLLOWUP_COLLECTION", "email_followups")
+PIXEL_COLLECTION = os.environ.get("PIXEL_COLLECTION", "email_opens")
 SEND_MAIL_SERVICE_URL = os.environ.get("SEND_MAIL_SERVICE_URL", "").rstrip("/")
+AUTO_FOLLOWUP_URL = os.environ.get("AUTO_FOLLOWUP_URL", "").rstrip("/")
 ODOO_DB_URL = os.environ.get("ODOO_DB_URL", "").rstrip("/")
 ODOO_SECRET = os.environ.get("ODOO_SECRET", "")
 MAIL_WRITER_URL = os.environ.get("MAIL_WRITER_URL", "").rstrip("/")
@@ -125,6 +128,21 @@ def send_draft(draft_id):
         if response.status_code == 200:
             result = response.json()
             flash(f"Email envoyé avec succès! Message ID: {result.get('message_id')}", "success")
+            
+            # Planifier les relances automatiques
+            if AUTO_FOLLOWUP_URL:
+                try:
+                    followup_response = requests.post(
+                        f"{AUTO_FOLLOWUP_URL}/schedule-followups",
+                        json={"draft_id": draft_id},
+                        timeout=10
+                    )
+                    if followup_response.status_code == 200:
+                        followup_result = followup_response.json()
+                        flash(f"Relances planifiées: {followup_result.get('followups_created', 0)}", "info")
+                except Exception as e:
+                    print(f"Erreur lors de la planification des relances: {str(e)}")
+            
             return redirect(url_for("index"))
         else:
             error_msg = response.json().get("error", "Erreur inconnue")
@@ -267,7 +285,7 @@ def regenerate_draft(draft_id):
 
 @app.route("/history")
 def history():
-    """Page historique - Liste tous les drafts envoyés ou rejetés."""
+    """Page historique - Liste tous les drafts envoyés ou rejetés avec leurs stats."""
     try:
         # Récupérer les drafts envoyés
         sent_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "sent").order_by("sent_at", direction=firestore.Query.DESCENDING).limit(50)
@@ -276,6 +294,25 @@ def history():
         for doc in sent_drafts_ref.stream():
             draft_data = doc.to_dict()
             draft_data["id"] = doc.id
+            
+            # Récupérer les stats d'ouverture pour ce draft
+            pixel_id = draft_data.get("pixel_id")
+            if pixel_id:
+                pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
+                if pixel_doc.exists:
+                    pixel_data = pixel_doc.to_dict()
+                    draft_data["open_count"] = pixel_data.get("open_count", 0)
+                    draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
+                    draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
+            
+            # Compter les relances pour ce draft
+            followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id)
+            followups = list(followups_ref.stream())
+            draft_data["total_followups"] = len(followups)
+            draft_data["scheduled_followups"] = len([f for f in followups if f.to_dict().get("status") == "scheduled"])
+            draft_data["sent_followups"] = len([f for f in followups if f.to_dict().get("status") == "sent"])
+            draft_data["cancelled_followups"] = len([f for f in followups if f.to_dict().get("status") == "cancelled"])
+            
             sent_drafts.append(draft_data)
         
         # Récupérer les drafts rejetés
@@ -292,6 +329,69 @@ def history():
     except Exception as e:
         flash(f"Erreur lors de la récupération de l'historique: {str(e)}", "error")
         return render_template("history.html", sent_drafts=[], rejected_drafts=[])
+
+
+@app.route("/sent/<draft_id>")
+def view_sent_draft(draft_id):
+    """Page de détail d'un mail envoyé."""
+    try:
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Mail non trouvé", "error")
+            return redirect(url_for("history"))
+        
+        draft_data = doc.to_dict()
+        draft_data["id"] = doc.id
+        
+        # Vérifier que le mail est bien envoyé
+        if draft_data.get("status") != "sent":
+            flash("Ce mail n'a pas encore été envoyé", "warning")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        
+        # Récupérer les stats d'ouverture
+        pixel_id = draft_data.get("pixel_id")
+        if pixel_id:
+            pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
+            if pixel_doc.exists:
+                pixel_data = pixel_doc.to_dict()
+                draft_data["open_count"] = pixel_data.get("open_count", 0)
+                draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
+                draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
+        
+        # Récupérer les relances
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id).order_by("days_after_initial")
+        followups = []
+        total_followups = 0
+        scheduled_followups = 0
+        sent_followups = 0
+        cancelled_followups = 0
+        
+        for followup_doc in followups_ref.stream():
+            followup_data = followup_doc.to_dict()
+            followup_data["id"] = followup_doc.id
+            followups.append(followup_data)
+            
+            total_followups += 1
+            status = followup_data.get("status")
+            if status == "scheduled":
+                scheduled_followups += 1
+            elif status == "sent":
+                sent_followups += 1
+            elif status == "cancelled":
+                cancelled_followups += 1
+        
+        draft_data["total_followups"] = total_followups
+        draft_data["scheduled_followups"] = scheduled_followups
+        draft_data["sent_followups"] = sent_followups
+        draft_data["cancelled_followups"] = cancelled_followups
+        
+        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups)
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("history"))
 
 
 @app.route("/api/stats")
