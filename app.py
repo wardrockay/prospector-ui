@@ -231,6 +231,42 @@ def reject_draft(draft_id):
         return redirect(url_for("index"))
 
 
+@app.route("/edit/<draft_id>", methods=["POST"])
+def edit_draft(draft_id):
+    """Modifie le sujet et le corps d'un draft."""
+    try:
+        # Récupérer les données du formulaire
+        new_subject = request.form.get("subject", "").strip()
+        new_body = request.form.get("body", "").strip()
+        
+        if not new_subject or not new_body:
+            flash("Le sujet et le corps du message ne peuvent pas être vides", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        
+        # Récupérer le draft
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Draft non trouvé", "error")
+            return redirect(url_for("index"))
+        
+        # Mettre à jour le draft
+        doc_ref.update({
+            "subject": new_subject,
+            "body": new_body,
+            "edited_at": datetime.utcnow(),
+            "manually_edited": True
+        })
+        
+        flash("Draft modifié avec succès", "success")
+        return redirect(url_for("view_draft", draft_id=draft_id))
+    
+    except Exception as e:
+        flash(f"Erreur lors de la modification: {str(e)}", "error")
+        return redirect(url_for("view_draft", draft_id=draft_id))
+
+
 @app.route("/regenerate/<draft_id>", methods=["POST"])
 def regenerate_draft(draft_id):
     """Régénère un draft en récupérant les données depuis Odoo."""

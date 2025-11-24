@@ -96,6 +96,53 @@
         margin-bottom: 10px;
         color: #856404;
     }
+    
+    .edit-mode {
+        display: none;
+    }
+    
+    .edit-mode.active {
+        display: block;
+    }
+    
+    .view-mode.hidden {
+        display: none;
+    }
+    
+    .edit-form {
+        margin: 20px 0;
+    }
+    
+    .edit-form label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #555;
+    }
+    
+    .edit-form input[type="text"],
+    .edit-form textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        font-size: 14px;
+        margin-bottom: 15px;
+    }
+    
+    .edit-form textarea {
+        min-height: 300px;
+        resize: vertical;
+        line-height: 1.6;
+        white-space: pre-wrap;
+    }
+    
+    .edit-actions {
+        display: flex;
+        gap: 10px;
+        padding-top: 10px;
+    }
 </style>
 {% endblock %}
 
@@ -167,11 +214,34 @@
     
     <div>
         <h3 style="margin-bottom: 10px;">Message :</h3>
-        <div class="draft-body">{{ draft.body }}</div>
+        <div class="view-mode" id="viewMode">
+            <div class="draft-body">{{ draft.body }}</div>
+        </div>
+        
+        <div class="edit-mode" id="editMode">
+            <form method="POST" action="{{ url_for('edit_draft', draft_id=draft.id) }}" class="edit-form">
+                <div>
+                    <label for="subject">Sujet :</label>
+                    <input type="text" id="subject" name="subject" value="{{ draft.subject }}" required>
+                </div>
+                
+                <div>
+                    <label for="body">Corps du message :</label>
+                    <textarea id="body" name="body" required>{{ draft.body }}</textarea>
+                </div>
+                
+                <div class="edit-actions">
+                    <button type="submit" class="btn btn-success">💾 Enregistrer les modifications</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Annuler</button>
+                </div>
+            </form>
+        </div>
     </div>
     
     <div class="actions">
         <button type="button" class="btn btn-success" onclick="showConfirm()">✅ Envoyer ce mail</button>
+        
+        <button type="button" class="btn btn-primary" onclick="toggleEdit()">✏️ Modifier</button>
         
         {% if draft.x_external_id %}
         <form method="POST" action="{{ url_for('regenerate_draft', draft_id=draft.id) }}" style="display: inline;">
@@ -208,6 +278,29 @@
     
     function changeVersion(draftId) {
         window.location.href = '/draft/' + draftId;
+    }
+    
+    function toggleEdit() {
+        const viewMode = document.getElementById('viewMode');
+        const editMode = document.getElementById('editMode');
+        
+        if (editMode.classList.contains('active')) {
+            // Retour en mode lecture
+            viewMode.classList.remove('hidden');
+            editMode.classList.remove('active');
+        } else {
+            // Passage en mode édition
+            viewMode.classList.add('hidden');
+            editMode.classList.add('active');
+        }
+    }
+    
+    function cancelEdit() {
+        const viewMode = document.getElementById('viewMode');
+        const editMode = document.getElementById('editMode');
+        
+        viewMode.classList.remove('hidden');
+        editMode.classList.remove('active');
     }
 </script>
 {% endblock %}
