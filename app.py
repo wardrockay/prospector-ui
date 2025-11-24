@@ -265,6 +265,7 @@ def regenerate_draft(draft_id):
         odoo_payload = {
             "domain": [["x_external_id", "ilike", x_external_id]],
             "fields": [
+                "id",
                 "email_normalized",
                 "website",
                 "contact_name",
@@ -292,6 +293,7 @@ def regenerate_draft(draft_id):
         print(f"[DEBUG] Lead récupéré depuis Odoo: {lead}")
         
         # Extraire les informations
+        odoo_id = lead.get("id")
         contact_name = lead.get("contact_name", "")
         name_parts = contact_name.split(" ", 1) if contact_name else ["", ""]
         first_name = name_parts[0] if len(name_parts) > 0 else ""
@@ -307,7 +309,8 @@ def regenerate_draft(draft_id):
             "function": lead.get("function", ""),
             "description": lead.get("description", ""),
             "x_external_id": x_external_id,
-            "version_group_id": version_group_id  # Garder le même groupe de versions
+            "version_group_id": version_group_id,  # Garder le même groupe de versions
+            "odoo_id": odoo_id  # Ajouter l'ID Odoo
         }
         
         print(f"[DEBUG] Appel mail_writer avec: {mail_writer_payload}")

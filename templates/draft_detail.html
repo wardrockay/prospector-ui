@@ -148,8 +148,17 @@
         </dd>
         
         {% if draft.x_external_id %}
-        <dt>ID Externe (Pharow) :</dt>
+        <dt>ID Pharow :</dt>
         <dd><code>{{ draft.x_external_id }}</code></dd>
+        {% endif %}
+        
+        {% if draft.odoo_id %}
+        <dt>Lead Odoo :</dt>
+        <dd>
+            <a href="https://lightandshutter.odoo.com/odoo/action-486/{{ draft.odoo_id }}" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: none;">
+                🔗 Voir le lead dans Odoo (ID: {{ draft.odoo_id }})
+            </a>
+        </dd>
         {% endif %}
         
         <dt>ID du draft :</dt>
