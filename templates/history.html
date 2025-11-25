@@ -61,6 +61,93 @@
         display: block;
         margin-top: 3px;
     }
+    
+    /* Styles des onglets */
+    .tabs-container {
+        margin-bottom: 20px;
+    }
+    
+    .tabs {
+        display: flex;
+        gap: 5px;
+        border-bottom: 2px solid #e0e0e0;
+        padding-bottom: 0;
+    }
+    
+    .tab-btn {
+        padding: 12px 20px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #7f8c8d;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        transition: all 0.2s ease;
+    }
+    
+    .tab-btn:hover {
+        color: #3498db;
+        background-color: #f8f9fa;
+    }
+    
+    .tab-btn.active {
+        color: #3498db;
+        border-bottom-color: #3498db;
+    }
+    
+    .tab-btn .count {
+        background-color: #e0e0e0;
+        color: #555;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-left: 8px;
+    }
+    
+    .tab-btn.active .count {
+        background-color: #3498db;
+        color: white;
+    }
+    
+    .tab-btn.danger .count {
+        background-color: #ffcdd2;
+        color: #c62828;
+    }
+    
+    .tab-btn.danger.active {
+        color: #e74c3c;
+        border-bottom-color: #e74c3c;
+    }
+    
+    .tab-btn.danger.active .count {
+        background-color: #e74c3c;
+        color: white;
+    }
+    
+    .tab-btn.success .count {
+        background-color: #c8e6c9;
+        color: #2e7d32;
+    }
+    
+    .tab-btn.success.active {
+        color: #27ae60;
+        border-bottom-color: #27ae60;
+    }
+    
+    .tab-btn.success.active .count {
+        background-color: #27ae60;
+        color: white;
+    }
+    
+    .email-row {
+        display: table-row;
+    }
+    
+    .email-row.hidden {
+        display: none;
+    }
 </style>
 {% endblock %}
 
@@ -96,6 +183,27 @@
 <div class="card">
     <h2 style="margin-bottom: 20px;">✅ Emails envoyés</h2>
     
+    <!-- Onglets de filtrage -->
+    <div class="tabs-container">
+        <div class="tabs">
+            <button class="tab-btn active" data-filter="all" onclick="filterEmails('all', this)">
+                📧 All <span class="count" id="count-all">{{ sent_drafts|length }}</span>
+            </button>
+            <button class="tab-btn success" data-filter="replied" onclick="filterEmails('replied', this)">
+                💬 Replied <span class="count" id="count-replied">0</span>
+            </button>
+            <button class="tab-btn" data-filter="read" onclick="filterEmails('read', this)">
+                👁️ Read <span class="count" id="count-read">0</span>
+            </button>
+            <button class="tab-btn" data-filter="unread" onclick="filterEmails('unread', this)">
+                📭 Unread <span class="count" id="count-unread">0</span>
+            </button>
+            <button class="tab-btn danger" data-filter="bounced" onclick="filterEmails('bounced', this)">
+                ❌ Bounced <span class="count" id="count-bounced">0</span>
+            </button>
+        </div>
+    </div>
+    
     {% if sent_drafts %}
         <table>
             <thead>
@@ -111,7 +219,10 @@
             </thead>
             <tbody>
                 {% for draft in sent_drafts %}
-                <tr {% if draft.has_bounce %}class="bounce-row"{% endif %}>
+                <tr class="email-row {% if draft.has_bounce %}bounce-row{% endif %}" 
+                    data-bounced="{{ 'true' if draft.has_bounce else 'false' }}"
+                    data-replied="{{ 'true' if draft.has_reply else 'false' }}"
+                    data-read="{{ 'true' if draft.open_count and draft.open_count > 0 else 'false' }}">
                     <td>
                         {% if draft.sent_at %}
                             {{ draft.sent_at.strftime('%d/%m/%Y %H:%M') if draft.sent_at is not string else draft.sent_at }}
@@ -227,4 +338,65 @@
 <div style="margin-top: 20px;">
     <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour aux drafts en attente</a>
 </div>
+
+<script>
+// Compter et initialiser les onglets
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('.email-row');
+    let countBounced = 0, countReplied = 0, countRead = 0, countUnread = 0;
+    
+    rows.forEach(row => {
+        const isBounced = row.dataset.bounced === 'true';
+        const isReplied = row.dataset.replied === 'true';
+        const isRead = row.dataset.read === 'true';
+        
+        if (isBounced) countBounced++;
+        if (isReplied) countReplied++;
+        if (isRead && !isBounced) countRead++;
+        if (!isRead && !isBounced) countUnread++;
+    });
+    
+    document.getElementById('count-bounced').textContent = countBounced;
+    document.getElementById('count-replied').textContent = countReplied;
+    document.getElementById('count-read').textContent = countRead;
+    document.getElementById('count-unread').textContent = countUnread;
+});
+
+function filterEmails(filter, btn) {
+    // Mettre à jour les onglets actifs
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Filtrer les lignes
+    const rows = document.querySelectorAll('.email-row');
+    
+    rows.forEach(row => {
+        const isBounced = row.dataset.bounced === 'true';
+        const isReplied = row.dataset.replied === 'true';
+        const isRead = row.dataset.read === 'true';
+        
+        let show = false;
+        
+        switch(filter) {
+            case 'all':
+                show = true;
+                break;
+            case 'bounced':
+                show = isBounced;
+                break;
+            case 'replied':
+                show = isReplied;
+                break;
+            case 'read':
+                show = isRead && !isBounced;
+                break;
+            case 'unread':
+                show = !isRead && !isBounced;
+                break;
+        }
+        
+        row.classList.toggle('hidden', !show);
+    });
+}
+</script>
 {% endblock %}
