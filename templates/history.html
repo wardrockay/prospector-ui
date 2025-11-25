@@ -293,7 +293,16 @@
 </div>
 
 <div class="card">
-    <h2 style="margin-bottom: 20px;">❌ Drafts rejetés</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">❌ Drafts rejetés</h2>
+        {% if rejected_drafts %}
+        <form method="POST" action="{{ url_for('delete_rejected_drafts') }}" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer tous les drafts rejetés ? Cette action est irréversible.');">
+            <button type="submit" class="btn btn-danger" style="font-size: 12px;">
+                🗑️ Supprimer tous ({{ rejected_drafts|length }})
+            </button>
+        </form>
+        {% endif %}
+    </div>
     
     {% if rejected_drafts %}
         <table>

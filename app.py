@@ -651,6 +651,26 @@ def history():
         return render_template("history.html", sent_drafts=[], rejected_drafts=[], stats={})
 
 
+@app.route("/delete-rejected-drafts", methods=["POST"])
+def delete_rejected_drafts():
+    """Supprime tous les drafts rejetés."""
+    try:
+        # Récupérer tous les drafts rejetés
+        rejected_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "rejected")
+        
+        deleted_count = 0
+        for doc in rejected_drafts_ref.stream():
+            doc.reference.delete()
+            deleted_count += 1
+        
+        flash(f"✓ {deleted_count} draft(s) rejeté(s) supprimé(s) avec succès", "success")
+        
+    except Exception as e:
+        flash(f"Erreur lors de la suppression: {str(e)}", "error")
+    
+    return redirect(url_for("history"))
+
+
 @app.route("/sent/<draft_id>")
 def view_sent_draft(draft_id):
     """Page de détail d'un mail envoyé."""
