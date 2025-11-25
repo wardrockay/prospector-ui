@@ -21,6 +21,7 @@ AUTO_FOLLOWUP_URL = os.environ.get("AUTO_FOLLOWUP_URL", "").rstrip("/")
 ODOO_DB_URL = os.environ.get("ODOO_DB_URL", "").rstrip("/")
 ODOO_SECRET = os.environ.get("ODOO_SECRET", "")
 MAIL_WRITER_URL = os.environ.get("MAIL_WRITER_URL", "").rstrip("/")
+GMAIL_NOTIFIER_URL = os.environ.get("GMAIL_NOTIFIER_URL", "").rstrip("/")
 
 
 def get_id_token(target_audience: str) -> str:
@@ -603,7 +604,7 @@ def history():
                     pixel_data = pixel_doc.to_dict()
                     draft_data["open_count"] = pixel_data.get("open_count", 0)
                     draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
-                    draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
+                    draft_data["last_open_at"] = pixel_data.get("last_open_at")
                     
                     # Compter comme ouvert si open_count > 0
                     if draft_data["open_count"] > 0:
@@ -679,7 +680,7 @@ def view_sent_draft(draft_id):
                 pixel_data = pixel_doc.to_dict()
                 draft_data["open_count"] = pixel_data.get("open_count", 0)
                 draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
-                draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
+                draft_data["last_open_at"] = pixel_data.get("last_open_at")
                 
                 # Récupérer l'historique des ouvertures depuis la sous-collection
                 opens_ref = db.collection(PIXEL_COLLECTION).document(pixel_id).collection("opens").order_by("opened_at", direction=firestore.Query.DESCENDING)
@@ -691,6 +692,7 @@ def view_sent_draft(draft_id):
         # Récupérer les relances
         followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id).order_by("days_after_initial")
         followups = []
+        sent_followup_messages = []  # Pour affichage dans le thread de conversation
         total_followups = 0
         scheduled_followups = 0
         sent_followups = 0
@@ -707,6 +709,8 @@ def view_sent_draft(draft_id):
                 scheduled_followups += 1
             elif status == "sent":
                 sent_followups += 1
+                # Ajouter aux messages envoyés pour le thread
+                sent_followup_messages.append(followup_data)
             elif status == "cancelled":
                 cancelled_followups += 1
         
@@ -715,11 +719,129 @@ def view_sent_draft(draft_id):
         draft_data["sent_followups"] = sent_followups
         draft_data["cancelled_followups"] = cancelled_followups
         
-        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups, open_history=open_history)
+        # Récupérer les messages du thread depuis la sous-collection
+        thread_messages = []
+        if draft_data.get("gmail_thread_id"):
+            thread_ref = doc_ref.collection('thread_messages').order_by('timestamp')
+            thread_count = 0
+            for msg_doc in thread_ref.stream():
+                msg_data = msg_doc.to_dict()
+                msg_data["id"] = msg_doc.id
+                thread_messages.append(msg_data)
+                thread_count += 1
+            
+            # Si aucun message dans le thread et qu'on a un thread_id, essayer de le récupérer
+            if thread_count == 0:
+                try:
+                    print(f"[INFO] Récupération du thread pour draft {draft_id}")
+                    fetch_thread_messages(draft_id)
+                    # Recharger les messages après récupération
+                    thread_messages = []
+                    for msg_doc in thread_ref.stream():
+                        msg_data = msg_doc.to_dict()
+                        msg_data["id"] = msg_doc.id
+                        thread_messages.append(msg_data)
+                except Exception as fetch_error:
+                    print(f"[WARNING] Impossible de récupérer le thread: {fetch_error}")
+        
+        # Si le draft a une réponse mais pas de message stocké, essayer de le récupérer
+        if draft_data.get("has_reply") and not draft_data.get("reply_message"):
+            try:
+                fetch_missing_reply(draft_id)
+                # Recharger les données après récupération
+                updated_doc = doc_ref.get()
+                if updated_doc.exists:
+                    draft_data = updated_doc.to_dict()
+                    draft_data["id"] = doc.id
+                    # Réappliquer les stats calculées
+                    draft_data["total_followups"] = total_followups
+                    draft_data["scheduled_followups"] = scheduled_followups
+                    draft_data["sent_followups"] = sent_followups
+                    draft_data["cancelled_followups"] = cancelled_followups
+            except Exception as fetch_error:
+                print(f"[WARNING] Impossible de récupérer la réponse: {fetch_error}")
+        
+        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups, sent_followup_messages=sent_followup_messages, thread_messages=thread_messages, open_history=open_history)
     
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for("history"))
+
+
+def fetch_missing_reply(draft_id):
+    """
+    Appelle le service gmail-notifier pour récupérer le contenu d'une réponse manquante.
+    """
+    if not GMAIL_NOTIFIER_URL:
+        raise Exception("GMAIL_NOTIFIER_URL non configuré")
+    
+    try:
+        id_token = get_id_token(GMAIL_NOTIFIER_URL)
+        headers = {
+            "Authorization": f"Bearer {id_token}",
+            "Content-Type": "application/json"
+        }
+    except Exception:
+        headers = {"Content-Type": "application/json"}
+    
+    response = requests.post(
+        f"{GMAIL_NOTIFIER_URL}/fetch-reply",
+        json={"draft_id": draft_id},
+        headers=headers,
+        timeout=30
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def fetch_thread_messages(draft_id):
+    """
+    Appelle le service gmail-notifier pour récupérer tout le thread de conversation.
+    """
+    if not GMAIL_NOTIFIER_URL:
+        raise Exception("GMAIL_NOTIFIER_URL non configuré")
+    
+    try:
+        id_token = get_id_token(GMAIL_NOTIFIER_URL)
+        headers = {
+            "Authorization": f"Bearer {id_token}",
+            "Content-Type": "application/json"
+        }
+    except Exception:
+        headers = {"Content-Type": "application/json"}
+    
+    response = requests.post(
+        f"{GMAIL_NOTIFIER_URL}/fetch-thread",
+        json={"draft_id": draft_id},
+        headers=headers,
+        timeout=30
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+@app.route("/fetch-reply/<draft_id>", methods=["POST"])
+def fetch_reply_endpoint(draft_id):
+    """Endpoint pour récupérer manuellement une réponse manquante."""
+    try:
+        result = fetch_missing_reply(draft_id)
+        flash(f"Réponse récupérée avec succès: {result.get('message', '')}", "success")
+    except Exception as e:
+        flash(f"Erreur lors de la récupération de la réponse: {str(e)}", "error")
+    
+    return redirect(url_for("view_sent_draft", draft_id=draft_id))
+
+
+@app.route("/fetch-thread/<draft_id>", methods=["POST"])
+def fetch_thread_endpoint(draft_id):
+    """Endpoint pour récupérer manuellement tout le thread de conversation."""
+    try:
+        result = fetch_thread_messages(draft_id)
+        flash(f"Thread récupéré avec succès: {result.get('message_count', 0)} messages", "success")
+    except Exception as e:
+        flash(f"Erreur lors de la récupération du thread: {str(e)}", "error")
+    
+    return redirect(url_for("view_sent_draft", draft_id=draft_id))
 
 
 @app.route("/resend-bounced/<draft_id>", methods=["POST"])

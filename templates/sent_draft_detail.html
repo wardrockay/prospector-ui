@@ -10,6 +10,147 @@
         margin-bottom: 20px;
     }
     
+    .main-content {
+        display: grid;
+        grid-template-columns: 1fr 500px;
+        gap: 30px;
+        margin-top: 20px;
+    }
+    
+    @media (max-width: 1200px) {
+        .main-content {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .left-column {
+        min-width: 0;
+    }
+    
+    .right-column {
+        position: sticky;
+        top: 20px;
+        height: fit-content;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+    }
+    
+    .conversation-panel {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    
+    .conversation-panel h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .message {
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .message.sent {
+        border-left: 4px solid #3498db;
+    }
+    
+    .message.followup {
+        border-left: 4px solid #9b59b6;
+    }
+    
+    .message.received {
+        border-left: 4px solid #27ae60;
+        background-color: #f0f9f4;
+    }
+    
+    .message.bounce {
+        border-left: 4px solid #e74c3c;
+        background-color: #ffebee;
+    }
+    
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+        font-size: 12px;
+        color: #7f8c8d;
+    }
+    
+    .message-type {
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+    
+    .message-type.sent {
+        background-color: #3498db;
+        color: white;
+    }
+    
+    .message-type.followup {
+        background-color: #9b59b6;
+        color: white;
+    }
+    
+    .message-type.received {
+        background-color: #27ae60;
+        color: white;
+    }
+    
+    .message-type.bounce {
+        background-color: #e74c3c;
+        color: white;
+    }
+    
+    .message-date {
+        font-size: 11px;
+        color: #95a5a6;
+    }
+    
+    .message-from {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 8px;
+        font-size: 13px;
+    }
+    
+    .message-subject {
+        font-weight: 600;
+        color: #34495e;
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+    
+    .message-body {
+        font-size: 13px;
+        line-height: 1.6;
+        color: #2c3e50;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .quoted-text {
+        border-left: 3px solid #ddd;
+        padding-left: 10px;
+        margin-top: 15px;
+        color: #7f8c8d;
+        font-size: 12px;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
     .info-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -138,9 +279,9 @@
                     ⏰ 1ère ouverture: {{ draft.first_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.first_opened_at is not string else draft.first_opened_at }}
                 </div>
             {% endif %}
-            {% if draft.last_opened_at %}
+            {% if draft.last_open_at %}
                 <div class="sub-value">
-                    🕐 Dernière: {{ draft.last_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.last_opened_at is not string else draft.last_opened_at }}
+                    🕐 Dernière: {{ draft.last_open_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.last_open_at is not string else draft.last_open_at }}
                 </div>
             {% endif %}
         </div>
@@ -204,99 +345,279 @@
     </div>
     {% endif %}
     
-    <!-- Informations du mail -->
-    <div class="section">
-        <h3>📋 Informations du mail</h3>
-        <dl class="draft-info">
-            <dt>Destinataire :</dt>
-            <dd>{{ draft.to }}</dd>
+    <!-- Layout 2 colonnes : Infos à gauche, Conversation à droite -->
+    <div class="main-content">
+        <!-- Colonne de gauche : Informations et statistiques -->
+        <div class="left-column">
+            <!-- Informations du mail -->
+            <div class="section">
+                <h3>📋 Informations du mail</h3>
+                <dl class="draft-info">
+                    <dt>Destinataire :</dt>
+                    <dd>{{ draft.to }}</dd>
+                    
+                    <dt>Sujet :</dt>
+                    <dd><strong>{{ draft.subject }}</strong></dd>
+                    
+                    <dt>Date d'envoi :</dt>
+                    <dd>
+                        {% if draft.sent_at %}
+                            {{ draft.sent_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.sent_at is not string else draft.sent_at }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </dd>
+                    
+                    <dt>Date de création :</dt>
+                    <dd>
+                        {% if draft.created_at %}
+                            {{ draft.created_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.created_at is not string else draft.created_at }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </dd>
+                    
+                    {% if draft.gmail_message_id %}
+                    <dt>Gmail Message ID :</dt>
+                    <dd><code style="font-size: 11px;">{{ draft.gmail_message_id }}</code></dd>
+                    {% endif %}
+                    
+                    {% if draft.gmail_thread_id %}
+                    <dt>Gmail Thread ID :</dt>
+                    <dd><code style="font-size: 11px;">{{ draft.gmail_thread_id }}</code></dd>
+                    {% endif %}
+                    
+                    {% if draft.pixel_id %}
+                    <dt>Pixel ID :</dt>
+                    <dd><code style="font-size: 11px;">{{ draft.pixel_id }}</code></dd>
+                    {% endif %}
+                    
+                    {% if draft.x_external_id %}
+                    <dt>ID Externe (Pharow) :</dt>
+                    <dd><code>{{ draft.x_external_id }}</code></dd>
+                    {% endif %}
+                    
+                    {% if draft.odoo_id %}
+                    <dt>Lead Odoo :</dt>
+                    <dd>
+                        <a href="https://lightandshutter.odoo.com/odoo/action-486/{{ draft.odoo_id }}" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: none;">
+                            🔗 Voir le lead dans Odoo (ID: {{ draft.odoo_id }})
+                        </a>
+                    </dd>
+                    {% endif %}
+                    
+                    <dt>ID Firestore :</dt>
+                    <dd><code style="font-size: 11px;">{{ draft.id }}</code></dd>
+                </dl>
+            </div>
             
-            <dt>Sujet :</dt>
-            <dd><strong>{{ draft.subject }}</strong></dd>
+            <!-- Relances détaillées -->
+            {% if followups %}
+            <div class="section">
+                <h3>🔄 Détails des relances</h3>
+                <ul class="followup-list">
+                    {% for followup in followups %}
+                    <li class="followup-item">
+                        <div>
+                            <strong>Relance à J+{{ followup.days_after_initial }}</strong>
+                            <br>
+                            <small style="color: #7f8c8d;">
+                                Prévue pour: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
+                            </small>
+                        </div>
+                        <span class="status status-{{ followup.status }}">
+                            {% if followup.status == 'scheduled' %}⏱ Planifiée
+                            {% elif followup.status == 'sent' %}✓ Envoyée
+                            {% elif followup.status == 'cancelled' %}✗ Annulée
+                            {% else %}{{ followup.status }}{% endif %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
             
-            <dt>Date d'envoi :</dt>
-            <dd>
-                {% if draft.sent_at %}
-                    {{ draft.sent_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.sent_at is not string else draft.sent_at }}
+            <!-- Historique des ouvertures -->
+            {% if open_history %}
+            <div class="section">
+                <h3>👀 Historique des ouvertures ({{ open_history|length }})</h3>
+                <ul class="open-history-list" style="list-style: none; padding: 0;">
+                    {% for open_event in open_history %}
+                    <li class="open-history-item" style="background-color: white; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; margin-bottom: 10px;">
+                        <div class="time" style="font-weight: 600; margin-bottom: 8px;">
+                            📅 {{ open_event.opened_at.strftime('%d/%m/%Y à %H:%M:%S') if open_event.opened_at is not string else open_event.opened_at }}
+                            <span style="background-color: #3498db; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 10px;">
+                                #{{ open_event.open_number }}
+                            </span>
+                        </div>
+                        <div class="details" style="font-size: 12px; color: #7f8c8d;">
+                            <div>🌐 IP: <code>{{ open_event.ip }}</code></div>
+                            <div style="margin-top: 5px;">💻 User-Agent: <code style="font-size: 10px;">{{ open_event.user_agent[:80] }}{% if open_event.user_agent|length > 80 %}...{% endif %}</code></div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% elif draft.pixel_id %}
+            <div class="section">
+                <h3>👀 Historique des ouvertures</h3>
+                <p style="color: #7f8c8d; font-style: italic;">Aucune ouverture enregistrée pour le moment.</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Colonne de droite : Conversation -->
+        <div class="right-column">
+            <div class="conversation-panel">
+                <h3>💬 Conversation</h3>
+                
+                {% if thread_messages %}
+                    <!-- Afficher tous les messages du thread -->
+                    {% for msg in thread_messages %}
+                        {% if msg.is_from_me %}
+                            <!-- Message envoyé par vous -->
+                            <div class="message {% if loop.index == 1 %}sent{% else %}followup{% endif %}">
+                                <div class="message-header">
+                                    <span class="message-type {% if loop.index == 1 %}sent{% else %}followup{% endif %}">
+                                        {% if loop.index == 1 %}Envoyé{% else %}Votre réponse{% endif %}
+                                    </span>
+                                    <span class="message-date">{{ msg.date }}</span>
+                                </div>
+                                <div class="message-from">À : {{ msg.to }}</div>
+                                {% if msg.subject %}
+                                <div class="message-subject">{{ msg.subject }}</div>
+                                {% endif %}
+                                <div class="message-body">{{ msg.body }}</div>
+                            </div>
+                        {% else %}
+                            <!-- Message reçu du prospect -->
+                            <div class="message received">
+                                <div class="message-header">
+                                    <span class="message-type received">✓ Reçu</span>
+                                    <span class="message-date">{{ msg.date }}</span>
+                                </div>
+                                <div class="message-from">De : {{ msg.from }}</div>
+                                {% if msg.subject %}
+                                <div class="message-subject">{{ msg.subject }}</div>
+                                {% endif %}
+                                <div class="message-body">{{ msg.body }}</div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                    
                 {% else %}
-                    -
+                    <!-- Affichage de secours si pas de thread_messages -->
+                    <!-- Message initial envoyé -->
+                    <div class="message sent">
+                        <div class="message-header">
+                            <span class="message-type sent">Envoyé</span>
+                            <span class="message-date">
+                                {% if draft.sent_at %}
+                                    {{ draft.sent_at.strftime('%d/%m/%Y %H:%M') if draft.sent_at is not string else draft.sent_at }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="message-from">À : {{ draft.to }}</div>
+                        <div class="message-subject">{{ draft.subject }}</div>
+                        <div class="message-body">{{ draft.body }}</div>
+                    </div>
+                    
+                    <!-- Relances envoyées (affichées chronologiquement) -->
+                    {% if sent_followup_messages %}
+                        {% for followup_msg in sent_followup_messages %}
+                        <div class="message followup">
+                            <div class="message-header">
+                                <span class="message-type followup">Relance J+{{ followup_msg.days_after_initial }}</span>
+                                <span class="message-date">
+                                    {% if followup_msg.sent_at %}
+                                        {{ followup_msg.sent_at.strftime('%d/%m/%Y %H:%M') if followup_msg.sent_at is not string else followup_msg.sent_at }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="message-from">À : {{ draft.to }}</div>
+                            {% if followup_msg.subject %}
+                            <div class="message-subject">{{ followup_msg.subject }}</div>
+                            {% endif %}
+                            <div class="message-body">{{ followup_msg.body or followup_msg.message or 'Relance automatique' }}</div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <!-- Bounce si détecté -->
+                    {% if draft.has_bounce %}
+                    <div class="message bounce">
+                        <div class="message-header">
+                            <span class="message-type bounce">❌ Bounce</span>
+                            <span class="message-date">
+                                {% if draft.bounce_received_at %}
+                                    {{ draft.bounce_received_at.strftime('%d/%m/%Y %H:%M') if draft.bounce_received_at is not string else draft.bounce_received_at }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="message-from">Email non délivré</div>
+                        {% if draft.bounce_reason %}
+                        <div class="message-body" style="color: #e74c3c;">{{ draft.bounce_reason }}</div>
+                        {% else %}
+                        <div class="message-body" style="color: #e74c3c;">L'adresse email est invalide ou inaccessible.</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Réponse si reçue -->
+                    {% if draft.has_reply %}
+                    <div class="message received">
+                        <div class="message-header">
+                            <span class="message-type received">✓ Reçu</span>
+                            <span class="message-date">
+                                {% if draft.reply_received_at %}
+                                    {{ draft.reply_received_at.strftime('%d/%m/%Y %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="message-from">De : {{ draft.reply_from }}</div>
+                        {% if draft.reply_subject %}
+                        <div class="message-subject">{{ draft.reply_subject }}</div>
+                        {% endif %}
+                        <div class="message-body">
+                            {% if draft.reply_message %}
+                                {% set clean_reply = draft.reply_message.split('Le ')[0].split('On ')[0].split('From:')[0].split('De :')[0].split('-----')[0].split('___')[0].strip() %}
+                                {{ clean_reply if clean_reply else draft.reply_message }}
+                                
+                                {% if draft.reply_message|length > clean_reply|length + 50 %}
+                                <div class="quoted-text">
+                                    <details>
+                                        <summary style="cursor: pointer; color: #7f8c8d; font-size: 11px;">Afficher le message cité...</summary>
+                                        {{ draft.reply_message[clean_reply|length:] }}
+                                    </details>
+                                </div>
+                                {% endif %}
+                            {% else %}
+                                <p style="color: #95a5a6; font-style: italic;">Le contenu de la réponse n'a pas été stocké.</p>
+                                <form method="POST" action="{{ url_for('fetch_reply_endpoint', draft_id=draft.id) }}" style="margin-top: 10px;">
+                                    <button type="submit" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">
+                                        🔄 Récupérer la réponse depuis Gmail
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if not draft.has_reply and not draft.has_bounce and draft.gmail_thread_id %}
+                    <form method="POST" action="{{ url_for('fetch_thread_endpoint', draft_id=draft.id) }}" style="margin-top: 10px; text-align: center;">
+                        <button type="submit" class="btn btn-primary" style="font-size: 12px; padding: 8px 16px;">
+                            🔄 Récupérer tout le thread de conversation
+                        </button>
+                    </form>
+                    {% endif %}
                 {% endif %}
-            </dd>
-            
-            <dt>Date de création :</dt>
-            <dd>
-                {% if draft.created_at %}
-                    {{ draft.created_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.created_at is not string else draft.created_at }}
-                {% else %}
-                    -
+                
+                {% if not draft.has_reply and not draft.has_bounce and not thread_messages %}
+                <p style="color: #95a5a6; font-style: italic; text-align: center; margin-top: 20px;">En attente de réponse...</p>
                 {% endif %}
-            </dd>
-            
-            {% if draft.gmail_message_id %}
-            <dt>Gmail Message ID :</dt>
-            <dd><code style="font-size: 11px;">{{ draft.gmail_message_id }}</code></dd>
-            {% endif %}
-            
-            {% if draft.gmail_thread_id %}
-            <dt>Gmail Thread ID :</dt>
-            <dd><code style="font-size: 11px;">{{ draft.gmail_thread_id }}</code></dd>
-            {% endif %}
-            
-            {% if draft.pixel_id %}
-            <dt>Pixel ID :</dt>
-            <dd><code style="font-size: 11px;">{{ draft.pixel_id }}</code></dd>
-            {% endif %}
-            
-            {% if draft.x_external_id %}
-            <dt>ID Externe (Pharow) :</dt>
-            <dd><code>{{ draft.x_external_id }}</code></dd>
-            {% endif %}
-            
-            {% if draft.odoo_id %}
-            <dt>Lead Odoo :</dt>
-            <dd>
-                <a href="https://lightandshutter.odoo.com/odoo/action-486/{{ draft.odoo_id }}" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: none;">
-                    🔗 Voir le lead dans Odoo (ID: {{ draft.odoo_id }})
-                </a>
-            </dd>
-            {% endif %}
-            
-            <dt>ID Firestore :</dt>
-            <dd><code style="font-size: 11px;">{{ draft.id }}</code></dd>
-        </dl>
+            </div>
+        </div>
     </div>
-    
-    <!-- Contenu du mail -->
-    <div class="section">
-        <h3>📄 Contenu du mail</h3>
-        <div class="draft-body">{{ draft.body }}</div>
-    </div>
-    
-    <!-- Relances détaillées -->
-    {% if followups %}
-    <div class="section">
-        <h3>🔄 Détails des relances</h3>
-        <ul class="followup-list">
-            {% for followup in followups %}
-            <li class="followup-item">
-                <div>
-                    <strong>Relance à J+{{ followup.days_after_initial }}</strong>
-                    <br>
-                    <small style="color: #7f8c8d;">
-                        Prévue pour: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
-                    </small>
-                </div>
-                <span class="status status-{{ followup.status }}">
-                    {% if followup.status == 'scheduled' %}⏱ Planifiée
-                    {% elif followup.status == 'sent' %}✓ Envoyée
-                    {% elif followup.status == 'cancelled' %}✗ Annulée
-                    {% else %}{{ followup.status }}{% endif %}
-                </span>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
     
     <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
         <a href="{{ url_for('history') }}" class="btn btn-secondary">← Retour à l'historique</a>
