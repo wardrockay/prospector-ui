@@ -158,6 +158,59 @@ def view_draft(draft_id):
         return redirect(url_for("index"))
 
 
+@app.route("/send-test/<draft_id>", methods=["POST"])
+def send_test_draft(draft_id):
+    """Envoie un draft à une adresse de test sans tracking ni changement de statut."""
+    try:
+        test_email = request.form.get("test_email", "").strip()
+        
+        if not test_email:
+            flash("Adresse email de test manquante", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        
+        if not SEND_MAIL_SERVICE_URL:
+            flash("Service d'envoi non configuré (SEND_MAIL_SERVICE_URL manquant)", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        
+        # Récupérer le draft
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Draft non trouvé", "error")
+            return redirect(url_for("index"))
+        
+        draft_data = doc.to_dict()
+        
+        # Générer l'ID token pour authentifier l'appel
+        id_token = get_id_token(SEND_MAIL_SERVICE_URL)
+        
+        # Appeler le service send_mail en mode test
+        response = requests.post(
+            f"{SEND_MAIL_SERVICE_URL}/send-draft",
+            json={
+                "draft_id": draft_id,
+                "test_mode": True,
+                "test_email": test_email
+            },
+            headers={"Authorization": f"Bearer {id_token}"},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            flash(f"Mail de test envoyé avec succès à {test_email}!", "success")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        else:
+            error_msg = response.json().get("error", "Erreur inconnue")
+            flash(f"Erreur lors de l'envoi du test: {error_msg}", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+    
+    except Exception as e:
+        flash(f"Erreur lors de l'envoi du test: {str(e)}", "error")
+        return redirect(url_for("view_draft", draft_id=draft_id))
+
+
 @app.route("/send/<draft_id>", methods=["POST"])
 def send_draft(draft_id):
     """Envoie un draft via le service send_mail."""

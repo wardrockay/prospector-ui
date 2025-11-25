@@ -4,7 +4,12 @@
 
 {% block content %}
 <div class="card">
-    <h2 style="margin-bottom: 20px;">📬 Drafts en attente de review</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">📬 Drafts en attente de review</h2>
+        <div style="background-color: #3498db; color: white; padding: 8px 16px; border-radius: 20px; font-size: 16px; font-weight: bold;">
+            {{ drafts|length }} draft{{ 's' if drafts|length > 1 else '' }}
+        </div>
+    </div>
     
     {% if drafts %}
         <table>

@@ -92,6 +92,19 @@
         display: block;
     }
     
+    .test-mail {
+        margin-top: 10px;
+        padding: 15px;
+        background-color: #e7f3ff;
+        border: 1px solid #2196f3;
+        border-radius: 4px;
+        display: none;
+    }
+    
+    .test-mail.show {
+        display: block;
+    }
+    
     .confirm-send p {
         margin-bottom: 10px;
         color: #856404;
@@ -241,6 +254,8 @@
     <div class="actions">
         <button type="button" class="btn btn-success" onclick="showConfirm()">✅ Envoyer ce mail</button>
         
+        <button type="button" class="btn btn-info" onclick="showTestMail()">🧪 Send test mail</button>
+        
         <button type="button" class="btn btn-primary" onclick="toggleEdit()">✏️ Modifier</button>
         
         {% if draft.x_external_id %}
@@ -265,15 +280,35 @@
             <button type="button" class="btn btn-secondary" onclick="hideConfirm()">Annuler</button>
         </form>
     </div>
+    
+    <div class="test-mail" id="testMail">
+        <p><strong>🧪 Envoyer un mail de test</strong></p>
+        <p>Entrez une adresse email pour recevoir ce mail en test (sans tracking, sans mise à jour du statut) :</p>
+        <form method="POST" action="{{ url_for('send_test_draft', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center;">
+            <input type="email" name="test_email" placeholder="votre.email@example.com" required style="flex: 1; padding: 8px; border: 1px solid #2196f3; border-radius: 4px;">
+            <button type="submit" class="btn btn-info">Envoyer le test</button>
+            <button type="button" class="btn btn-secondary" onclick="hideTestMail()">Annuler</button>
+        </form>
+    </div>
 </div>
 
 <script>
     function showConfirm() {
         document.getElementById('confirmSend').classList.add('show');
+        document.getElementById('testMail').classList.remove('show');
     }
     
     function hideConfirm() {
         document.getElementById('confirmSend').classList.remove('show');
+    }
+    
+    function showTestMail() {
+        document.getElementById('testMail').classList.add('show');
+        document.getElementById('confirmSend').classList.remove('show');
+    }
+    
+    function hideTestMail() {
+        document.getElementById('testMail').classList.remove('show');
     }
     
     function changeVersion(draftId) {

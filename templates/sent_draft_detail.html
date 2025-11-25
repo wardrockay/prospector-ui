@@ -134,13 +134,13 @@
                 {% endif %}
             </div>
             {% if draft.first_opened_at %}
-                <div class="sub-value">
-                    1ère ouverture: {{ draft.first_opened_at.strftime('%d/%m/%Y %H:%M') if draft.first_opened_at is not string else draft.first_opened_at }}
+                <div class="sub-value" style="font-weight: 600; color: #2c3e50; margin-top: 8px;">
+                    ⏰ 1ère ouverture: {{ draft.first_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.first_opened_at is not string else draft.first_opened_at }}
                 </div>
             {% endif %}
             {% if draft.last_opened_at and draft.open_count and draft.open_count > 1 %}
                 <div class="sub-value">
-                    Dernière: {{ draft.last_opened_at.strftime('%d/%m/%Y %H:%M') if draft.last_opened_at is not string else draft.last_opened_at }}
+                    Dernière: {{ draft.last_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.last_opened_at is not string else draft.last_opened_at }}
                 </div>
             {% endif %}
         </div>
