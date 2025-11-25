@@ -575,9 +575,25 @@ def history():
         sent_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "sent").order_by("sent_at", direction=firestore.Query.DESCENDING).limit(50)
         sent_drafts = []
         
+        # Statistiques globales
+        total_sent = 0
+        total_opened = 0
+        total_bounced = 0
+        total_replied = 0
+        
         for doc in sent_drafts_ref.stream():
             draft_data = doc.to_dict()
             draft_data["id"] = doc.id
+            
+            total_sent += 1
+            
+            # Vérifier les bounces
+            if draft_data.get("has_bounce"):
+                total_bounced += 1
+            
+            # Vérifier les réponses
+            if draft_data.get("has_reply"):
+                total_replied += 1
             
             # Récupérer les stats d'ouverture pour ce draft
             pixel_id = draft_data.get("pixel_id")
@@ -588,6 +604,10 @@ def history():
                     draft_data["open_count"] = pixel_data.get("open_count", 0)
                     draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
                     draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
+                    
+                    # Compter comme ouvert si open_count > 0
+                    if draft_data["open_count"] > 0:
+                        total_opened += 1
             
             # Compter les relances pour ce draft
             followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id)
@@ -599,6 +619,21 @@ def history():
             
             sent_drafts.append(draft_data)
         
+        # Calculer les taux
+        open_rate = (total_opened / total_sent * 100) if total_sent > 0 else 0
+        bounce_rate = (total_bounced / total_sent * 100) if total_sent > 0 else 0
+        reply_rate = (total_replied / total_sent * 100) if total_sent > 0 else 0
+        
+        stats = {
+            "total_sent": total_sent,
+            "total_opened": total_opened,
+            "total_bounced": total_bounced,
+            "total_replied": total_replied,
+            "open_rate": round(open_rate, 1),
+            "bounce_rate": round(bounce_rate, 1),
+            "reply_rate": round(reply_rate, 1)
+        }
+        
         # Récupérer les drafts rejetés
         rejected_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "rejected").order_by("rejected_at", direction=firestore.Query.DESCENDING).limit(50)
         rejected_drafts = []
@@ -608,11 +643,11 @@ def history():
             draft_data["id"] = doc.id
             rejected_drafts.append(draft_data)
         
-        return render_template("history.html", sent_drafts=sent_drafts, rejected_drafts=rejected_drafts)
+        return render_template("history.html", sent_drafts=sent_drafts, rejected_drafts=rejected_drafts, stats=stats)
     
     except Exception as e:
         flash(f"Erreur lors de la récupération de l'historique: {str(e)}", "error")
-        return render_template("history.html", sent_drafts=[], rejected_drafts=[])
+        return render_template("history.html", sent_drafts=[], rejected_drafts=[], stats={})
 
 
 @app.route("/sent/<draft_id>")

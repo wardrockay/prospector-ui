@@ -2,7 +2,97 @@
 
 {% block title %}Historique - Prospector{% endblock %}
 
+{% block extra_css %}
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-card.success {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    
+    .stat-card.danger {
+        background: linear-gradient(135deg, #eb3941 0%, #f15e64 100%);
+    }
+    
+    .stat-card.info {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stat-card h3 {
+        font-size: 14px;
+        margin: 0 0 10px 0;
+        opacity: 0.9;
+        font-weight: 500;
+    }
+    
+    .stat-card .value {
+        font-size: 32px;
+        font-weight: bold;
+        margin: 0;
+    }
+    
+    .stat-card .subtitle {
+        font-size: 12px;
+        margin-top: 5px;
+        opacity: 0.8;
+    }
+    
+    .bounce-row {
+        background-color: #ffebee !important;
+    }
+    
+    .bounce-indicator {
+        color: #e74c3c;
+        font-weight: bold;
+        font-size: 11px;
+        display: block;
+        margin-top: 3px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
+<!-- Statistiques globales -->
+{% if stats %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>📧 Emails envoyés</h3>
+        <div class="value">{{ stats.total_sent }}</div>
+    </div>
+    
+    <div class="stat-card success">
+        <h3>📭 Taux d'ouverture</h3>
+        <div class="value">{{ stats.open_rate }}%</div>
+        <div class="subtitle">{{ stats.total_opened }} / {{ stats.total_sent }} ouverts</div>
+    </div>
+    
+    <div class="stat-card info">
+        <h3>💬 Taux de réponse</h3>
+        <div class="value">{{ stats.reply_rate }}%</div>
+        <div class="subtitle">{{ stats.total_replied }} réponses</div>
+    </div>
+    
+    <div class="stat-card danger">
+        <h3>❌ Taux de bounce</h3>
+        <div class="value">{{ stats.bounce_rate }}%</div>
+        <div class="subtitle">{{ stats.total_bounced }} bounces</div>
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <h2 style="margin-bottom: 20px;">✅ Emails envoyés</h2>
     
@@ -21,7 +111,7 @@
             </thead>
             <tbody>
                 {% for draft in sent_drafts %}
-                <tr>
+                <tr {% if draft.has_bounce %}class="bounce-row"{% endif %}>
                     <td>
                         {% if draft.sent_at %}
                             {{ draft.sent_at.strftime('%d/%m/%Y %H:%M') if draft.sent_at is not string else draft.sent_at }}
@@ -29,7 +119,12 @@
                             -
                         {% endif %}
                     </td>
-                    <td>{{ draft.to }}</td>
+                    <td>
+                        {{ draft.to }}
+                        {% if draft.has_bounce %}
+                            <span class="bounce-indicator">⚠️ BOUNCE</span>
+                        {% endif %}
+                    </td>
                     <td>{{ draft.subject }}</td>
                     <td>
                         {% if draft.open_count and draft.open_count > 0 %}
@@ -44,7 +139,9 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if draft.has_reply %}
+                        {% if draft.has_bounce %}
+                            <span style="color: #e74c3c; font-weight: bold;">❌ Bounce</span>
+                        {% elif draft.has_reply %}
                             <span style="color: #27ae60; font-weight: bold;">✓ Oui</span>
                             {% if draft.reply_received_at %}
                                 <br><small style="color: #7f8c8d;">{{ draft.reply_received_at.strftime('%d/%m %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}</small>
