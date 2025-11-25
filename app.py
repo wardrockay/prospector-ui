@@ -158,6 +158,103 @@ def view_draft(draft_id):
         return redirect(url_for("index"))
 
 
+@app.route("/change-email-and-send/<draft_id>", methods=["POST"])
+def change_email_and_send(draft_id):
+    """Change l'adresse email du draft et l'envoie immédiatement."""
+    try:
+        new_email = request.form.get("new_email", "").strip()
+        
+        if not new_email:
+            flash("Nouvelle adresse email manquante", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        
+        # Récupérer le draft
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Draft non trouvé", "error")
+            return redirect(url_for("index"))
+        
+        # Mettre à jour l'adresse email dans Firestore
+        doc_ref.update({
+            "to": new_email,
+            "email_changed": True,
+            "original_email": doc.to_dict().get("to"),
+            "email_changed_at": datetime.utcnow()
+        })
+        
+        flash(f"Adresse email mise à jour vers {new_email}", "info")
+        
+        # Envoyer le draft avec la nouvelle adresse
+        if not SEND_MAIL_SERVICE_URL:
+            flash("Service d'envoi non configuré (SEND_MAIL_SERVICE_URL manquant)", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+        
+        # Générer l'ID token pour authentifier l'appel
+        id_token = get_id_token(SEND_MAIL_SERVICE_URL)
+        
+        # Appeler le service send_mail
+        response = requests.post(
+            f"{SEND_MAIL_SERVICE_URL}/send-draft",
+            json={"draft_id": draft_id},
+            headers={"Authorization": f"Bearer {id_token}"},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            flash(f"Email envoyé avec succès à {new_email}! Message ID: {result.get('message_id')}", "success")
+            
+            # Récupérer le draft envoyé pour obtenir son version_group_id
+            doc = doc_ref.get()
+            if doc.exists:
+                draft_data = doc.to_dict()
+                version_group_id = draft_data.get("version_group_id")
+                
+                # Si ce draft fait partie d'un groupe de versions, rejeter automatiquement les autres versions
+                if version_group_id:
+                    other_versions_ref = db.collection(DRAFT_COLLECTION).where("version_group_id", "==", version_group_id).where("status", "==", "pending")
+                    rejected_count = 0
+                    
+                    for other_doc in other_versions_ref.stream():
+                        if other_doc.id != draft_id:
+                            other_doc.reference.update({
+                                "status": "rejected",
+                                "rejected_at": datetime.utcnow(),
+                                "auto_rejected": True,
+                                "rejected_reason": f"Autre version envoyée (draft {draft_id})"
+                            })
+                            rejected_count += 1
+                    
+                    if rejected_count > 0:
+                        flash(f"{rejected_count} autre(s) version(s) automatiquement rejetée(s)", "info")
+            
+            # Planifier les relances automatiques
+            if AUTO_FOLLOWUP_URL:
+                try:
+                    followup_response = requests.post(
+                        f"{AUTO_FOLLOWUP_URL}/schedule-followups",
+                        json={"draft_id": draft_id},
+                        timeout=10
+                    )
+                    if followup_response.status_code == 200:
+                        followup_result = followup_response.json()
+                        flash(f"Relances planifiées: {followup_result.get('followups_created', 0)}", "info")
+                except Exception as e:
+                    print(f"Erreur lors de la planification des relances: {str(e)}")
+            
+            return redirect(url_for("index"))
+        else:
+            error_msg = response.json().get("error", "Erreur inconnue")
+            flash(f"Erreur lors de l'envoi: {error_msg}", "error")
+            return redirect(url_for("view_draft", draft_id=draft_id))
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("view_draft", draft_id=draft_id))
+
+
 @app.route("/send-test/<draft_id>", methods=["POST"])
 def send_test_draft(draft_id):
     """Envoie un draft à une adresse de test sans tracking ni changement de statut."""
@@ -233,6 +330,33 @@ def send_draft(draft_id):
         if response.status_code == 200:
             result = response.json()
             flash(f"Email envoyé avec succès! Message ID: {result.get('message_id')}", "success")
+            
+            # Récupérer le draft envoyé pour obtenir son version_group_id
+            doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+            doc = doc_ref.get()
+            
+            if doc.exists:
+                draft_data = doc.to_dict()
+                version_group_id = draft_data.get("version_group_id")
+                
+                # Si ce draft fait partie d'un groupe de versions, rejeter automatiquement les autres versions
+                if version_group_id:
+                    other_versions_ref = db.collection(DRAFT_COLLECTION).where("version_group_id", "==", version_group_id).where("status", "==", "pending")
+                    rejected_count = 0
+                    
+                    for other_doc in other_versions_ref.stream():
+                        # Ne pas rejeter le draft qui vient d'être envoyé
+                        if other_doc.id != draft_id:
+                            other_doc.reference.update({
+                                "status": "rejected",
+                                "rejected_at": datetime.utcnow(),
+                                "auto_rejected": True,
+                                "rejected_reason": f"Autre version envoyée (draft {draft_id})"
+                            })
+                            rejected_count += 1
+                    
+                    if rejected_count > 0:
+                        flash(f"{rejected_count} autre(s) version(s) automatiquement rejetée(s)", "info")
             
             # Planifier les relances automatiques
             if AUTO_FOLLOWUP_URL:
@@ -512,6 +636,8 @@ def view_sent_draft(draft_id):
         
         # Récupérer les stats d'ouverture
         pixel_id = draft_data.get("pixel_id")
+        open_history = []
+        
         if pixel_id:
             pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
             if pixel_doc.exists:
@@ -519,6 +645,13 @@ def view_sent_draft(draft_id):
                 draft_data["open_count"] = pixel_data.get("open_count", 0)
                 draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
                 draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
+                
+                # Récupérer l'historique des ouvertures depuis la sous-collection
+                opens_ref = db.collection(PIXEL_COLLECTION).document(pixel_id).collection("opens").order_by("opened_at", direction=firestore.Query.DESCENDING)
+                for open_doc in opens_ref.stream():
+                    open_data = open_doc.to_dict()
+                    open_data["id"] = open_doc.id
+                    open_history.append(open_data)
         
         # Récupérer les relances
         followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id).order_by("days_after_initial")
@@ -547,11 +680,73 @@ def view_sent_draft(draft_id):
         draft_data["sent_followups"] = sent_followups
         draft_data["cancelled_followups"] = cancelled_followups
         
-        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups)
+        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups, open_history=open_history)
     
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for("history"))
+
+
+@app.route("/resend-bounced/<draft_id>", methods=["POST"])
+def resend_bounced_email(draft_id):
+    """Crée un nouveau draft avec une nouvelle adresse pour un email qui a bounced."""
+    try:
+        new_email = request.form.get("new_email", "").strip()
+        
+        if not new_email:
+            flash("Nouvelle adresse email manquante", "error")
+            return redirect(url_for("view_sent_draft", draft_id=draft_id))
+        
+        # Récupérer le draft bounced
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Draft non trouvé", "error")
+            return redirect(url_for("history"))
+        
+        draft_data = doc.to_dict()
+        
+        # Vérifier que c'est bien un bounce
+        if not draft_data.get("has_bounce"):
+            flash("Ce draft n'a pas bounced", "warning")
+            return redirect(url_for("view_sent_draft", draft_id=draft_id))
+        
+        # Créer un nouveau draft avec la nouvelle adresse
+        new_draft_data = {
+            "to": new_email,
+            "subject": draft_data.get("subject"),
+            "body": draft_data.get("body"),
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+            "x_external_id": draft_data.get("x_external_id"),
+            "version_group_id": draft_data.get("version_group_id"),
+            "odoo_id": draft_data.get("odoo_id"),
+            "resent_from_bounced": True,
+            "original_bounced_draft_id": draft_id,
+            "original_bounced_email": draft_data.get("to")
+        }
+        
+        # Ajouter contact_info si présent
+        if "contact_info" in draft_data:
+            new_draft_data["contact_info"] = draft_data["contact_info"]
+        
+        # Créer le nouveau draft
+        new_draft_ref = db.collection(DRAFT_COLLECTION).add(new_draft_data)
+        new_draft_id = new_draft_ref[1].id
+        
+        # Mettre à jour le draft bounced pour indiquer qu'un nouveau draft a été créé
+        doc_ref.update({
+            "resent_draft_id": new_draft_id,
+            "resent_at": datetime.utcnow()
+        })
+        
+        flash(f"Nouveau draft créé avec l'adresse {new_email}. Vous pouvez le vérifier et l'envoyer.", "success")
+        return redirect(url_for("view_draft", draft_id=new_draft_id))
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("view_sent_draft", draft_id=draft_id))
 
 
 @app.route("/api/stats")

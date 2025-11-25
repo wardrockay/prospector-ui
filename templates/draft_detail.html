@@ -105,6 +105,19 @@
         display: block;
     }
     
+    .change-email {
+        margin-top: 10px;
+        padding: 15px;
+        background-color: #fff3e0;
+        border: 1px solid #ff9800;
+        border-radius: 4px;
+        display: none;
+    }
+    
+    .change-email.show {
+        display: block;
+    }
+    
     .confirm-send p {
         margin-bottom: 10px;
         color: #856404;
@@ -254,6 +267,8 @@
     <div class="actions">
         <button type="button" class="btn btn-success" onclick="showConfirm()">✅ Envoyer ce mail</button>
         
+        <button type="button" class="btn btn-warning" onclick="showChangeEmail()">📧 Changer l'adresse</button>
+        
         <button type="button" class="btn btn-info" onclick="showTestMail()">🧪 Send test mail</button>
         
         <button type="button" class="btn btn-primary" onclick="toggleEdit()">✏️ Modifier</button>
@@ -290,12 +305,24 @@
             <button type="button" class="btn btn-secondary" onclick="hideTestMail()">Annuler</button>
         </form>
     </div>
+    
+    <div class="change-email" id="changeEmail">
+        <p><strong>📧 Changer l'adresse de destination</strong></p>
+        <p>L'adresse actuelle <strong>{{ draft.to }}</strong> n'est pas valide ou vous souhaitez envoyer à une autre adresse.</p>
+        <p>Entrez la nouvelle adresse email :</p>
+        <form method="POST" action="{{ url_for('change_email_and_send', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center;">
+            <input type="email" name="new_email" placeholder="nouvelle.adresse@example.com" required style="flex: 1; padding: 8px; border: 1px solid #ff9800; border-radius: 4px;">
+            <button type="submit" class="btn btn-warning">Mettre à jour et envoyer</button>
+            <button type="button" class="btn btn-secondary" onclick="hideChangeEmail()">Annuler</button>
+        </form>
+    </div>
 </div>
 
 <script>
     function showConfirm() {
         document.getElementById('confirmSend').classList.add('show');
         document.getElementById('testMail').classList.remove('show');
+        document.getElementById('changeEmail').classList.remove('show');
     }
     
     function hideConfirm() {
@@ -305,10 +332,21 @@
     function showTestMail() {
         document.getElementById('testMail').classList.add('show');
         document.getElementById('confirmSend').classList.remove('show');
+        document.getElementById('changeEmail').classList.remove('show');
     }
     
     function hideTestMail() {
         document.getElementById('testMail').classList.remove('show');
+    }
+    
+    function showChangeEmail() {
+        document.getElementById('changeEmail').classList.add('show');
+        document.getElementById('confirmSend').classList.remove('show');
+        document.getElementById('testMail').classList.remove('show');
+    }
+    
+    function hideChangeEmail() {
+        document.getElementById('changeEmail').classList.remove('show');
     }
     
     function changeVersion(draftId) {

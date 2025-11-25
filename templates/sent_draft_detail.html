@@ -138,9 +138,9 @@
                     ⏰ 1ère ouverture: {{ draft.first_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.first_opened_at is not string else draft.first_opened_at }}
                 </div>
             {% endif %}
-            {% if draft.last_opened_at and draft.open_count and draft.open_count > 1 %}
+            {% if draft.last_opened_at %}
                 <div class="sub-value">
-                    Dernière: {{ draft.last_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.last_opened_at is not string else draft.last_opened_at }}
+                    🕐 Dernière: {{ draft.last_opened_at.strftime('%d/%m/%Y à %H:%M:%S') if draft.last_opened_at is not string else draft.last_opened_at }}
                 </div>
             {% endif %}
         </div>
@@ -148,13 +148,27 @@
         <div class="info-card">
             <h3>💬 Réponse</h3>
             <div class="value">
-                {% if draft.has_reply %}
+                {% if draft.has_bounce %}
+                    <span style="color: #e74c3c;">❌ Bounce</span>
+                {% elif draft.has_reply %}
                     <span style="color: #27ae60;">✓ Reçue</span>
                 {% else %}
                     <span style="color: #95a5a6;">Aucune</span>
                 {% endif %}
             </div>
-            {% if draft.reply_received_at %}
+            {% if draft.has_bounce %}
+                <div class="sub-value" style="color: #e74c3c; font-weight: 600;">
+                    ⚠️ Email invalide
+                </div>
+                {% if draft.bounce_received_at %}
+                <div class="sub-value">
+                    {{ draft.bounce_received_at.strftime('%d/%m/%Y %H:%M') if draft.bounce_received_at is not string else draft.bounce_received_at }}
+                </div>
+                {% endif %}
+                {% if draft.bounce_reason %}
+                <div class="sub-value" style="font-size: 11px;">{{ draft.bounce_reason[:60] }}...</div>
+                {% endif %}
+            {% elif draft.reply_received_at %}
                 <div class="sub-value">
                     {{ draft.reply_received_at.strftime('%d/%m/%Y %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}
                 </div>
@@ -174,6 +188,21 @@
             </div>
         </div>
     </div>
+    
+    <!-- Alerte si bounce détecté -->
+    {% if draft.has_bounce %}
+    <div style="background-color: #fff3f3; border-left: 4px solid #e74c3c; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+        <h3 style="color: #e74c3c; margin: 0 0 10px 0;">⚠️ Email non délivré (Bounce)</h3>
+        <p style="margin: 0 0 10px 0;">L'adresse email <strong>{{ draft.to }}</strong> est invalide ou inaccessible.</p>
+        {% if draft.bounce_reason %}
+        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666;">Raison: {{ draft.bounce_reason }}</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('resend_bounced_email', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+            <input type="email" name="new_email" placeholder="Nouvelle adresse email valide" required style="flex: 1; padding: 8px; border: 1px solid #e74c3c; border-radius: 4px;">
+            <button type="submit" class="btn btn-warning">🔄 Renvoyer à cette adresse</button>
+        </form>
+    </div>
+    {% endif %}
     
     <!-- Informations du mail -->
     <div class="section">
