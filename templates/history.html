@@ -279,7 +279,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <a href="{{ url_for('view_sent_draft', draft_id=draft.id) }}" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">👁️ Détails</a>
+                        <a href="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">👁️ Détails</a>
                     </td>
                 </tr>
                 {% endfor %}
@@ -296,7 +296,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2 style="margin: 0;">❌ Drafts rejetés</h2>
         {% if rejected_drafts %}
-        <form method="POST" action="{{ url_for('delete_rejected_drafts') }}" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer tous les drafts rejetés ? Cette action est irréversible.');">
+        <form method="POST" action="{{ url_for('api.delete_rejected') }}" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer tous les drafts rejetés ? Cette action est irréversible.');">
             <button type="submit" class="btn btn-danger" style="font-size: 12px;">
                 🗑️ Supprimer tous ({{ rejected_drafts|length }})
             </button>
@@ -345,7 +345,7 @@
 </div>
 
 <div style="margin-top: 20px;">
-    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour aux drafts en attente</a>
+    <a href="{{ url_for('main.index') }}" class="btn btn-secondary">← Retour aux drafts en attente</a>
 </div>
 
 <script>

@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Prospector{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        text-align: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .stat-card.primary { border-top: 4px solid #3498db; }
+    .stat-card.success { border-top: 4px solid #27ae60; }
+    .stat-card.warning { border-top: 4px solid #f39c12; }
+    .stat-card.danger { border-top: 4px solid #e74c3c; }
+    .stat-card.info { border-top: 4px solid #9b59b6; }
+    
+    .stat-value {
+        font-size: 36px;
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 8px;
+    }
+    
+    .stat-label {
+        font-size: 14px;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .stat-rate {
+        font-size: 18px;
+        font-weight: 600;
+        margin-top: 8px;
+    }
+    
+    .stat-rate.good { color: #27ae60; }
+    .stat-rate.medium { color: #f39c12; }
+    .stat-rate.bad { color: #e74c3c; }
+    
+    .charts-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    @media (max-width: 1000px) {
+        .charts-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .chart-card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .chart-card h3 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        color: #2c3e50;
+        font-size: 18px;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    
+    .funnel-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+    }
+    
+    .funnel-step {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        color: white;
+        font-weight: 600;
+        text-align: center;
+        transition: all 0.3s;
+    }
+    
+    .funnel-step:hover {
+        filter: brightness(1.1);
+    }
+    
+    .funnel-step.sent {
+        background: #3498db;
+        width: 100%;
+        clip-path: polygon(0 0, 100% 0, 95% 100%, 5% 100%);
+    }
+    
+    .funnel-step.opened {
+        background: #f39c12;
+        width: 85%;
+        clip-path: polygon(5% 0, 95% 0, 90% 100%, 10% 100%);
+    }
+    
+    .funnel-step.replied {
+        background: #27ae60;
+        width: 70%;
+        clip-path: polygon(10% 0, 90% 0, 85% 100%, 15% 100%);
+        border-radius: 0 0 8px 8px;
+    }
+    
+    .quick-actions {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+    
+    .action-card {
+        flex: 1;
+        min-width: 200px;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.2s;
+    }
+    
+    .action-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .action-icon {
+        font-size: 32px;
+    }
+    
+    .action-info h4 {
+        margin: 0 0 4px 0;
+        color: #2c3e50;
+    }
+    
+    .action-info p {
+        margin: 0;
+        color: #7f8c8d;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>📊 Dashboard Analytics</h2>
+    <span style="color: #7f8c8d;">Dernière mise à jour: maintenant</span>
+</div>
+
+<!-- Statistiques principales -->
+<div class="stats-grid">
+    <div class="stat-card primary">
+        <div class="stat-value">{{ total_sent }}</div>
+        <div class="stat-label">Emails envoyés</div>
+    </div>
+    
+    <div class="stat-card success">
+        <div class="stat-value">{{ total_opened }}</div>
+        <div class="stat-label">Emails ouverts</div>
+        <div class="stat-rate {% if open_rate > 50 %}good{% elif open_rate > 30 %}medium{% else %}bad{% endif %}">
+            {{ "%.1f"|format(open_rate) }}%
+        </div>
+    </div>
+    
+    <div class="stat-card info">
+        <div class="stat-value">{{ total_replied }}</div>
+        <div class="stat-label">Réponses reçues</div>
+        <div class="stat-rate {% if reply_rate > 10 %}good{% elif reply_rate > 5 %}medium{% else %}bad{% endif %}">
+            {{ "%.1f"|format(reply_rate) }}%
+        </div>
+    </div>
+    
+    <div class="stat-card danger">
+        <div class="stat-value">{{ total_bounced }}</div>
+        <div class="stat-label">Bounces</div>
+        <div class="stat-rate {% if bounce_rate < 5 %}good{% elif bounce_rate < 10 %}medium{% else %}bad{% endif %}">
+            {{ "%.1f"|format(bounce_rate) }}%
+        </div>
+    </div>
+    
+    <div class="stat-card warning">
+        <div class="stat-value">{{ avg_response_time }}</div>
+        <div class="stat-label">Temps moyen de réponse</div>
+    </div>
+</div>
+
+<!-- Graphiques -->
+<div class="charts-grid">
+    <div class="chart-card">
+        <h3>📈 Activité des 14 derniers jours</h3>
+        <div class="chart-container">
+            <canvas id="activityChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <h3>🎯 Funnel de conversion</h3>
+        <div class="funnel-container">
+            <div class="funnel-step sent">
+                📤 Envoyés: {{ total_sent }}
+            </div>
+            <div class="funnel-step opened">
+                👀 Ouverts: {{ total_opened }} ({{ "%.0f"|format(open_rate) }}%)
+            </div>
+            <div class="funnel-step replied">
+                💬 Réponses: {{ total_replied }} ({{ "%.0f"|format(reply_rate) }}%)
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions rapides -->
+<h3 style="margin-bottom: 15px;">⚡ Actions rapides</h3>
+<div class="quick-actions">
+    <a href="{{ url_for('main.index') }}" class="action-card">
+        <span class="action-icon">📬</span>
+        <div class="action-info">
+            <h4>{{ pending_count }} drafts en attente</h4>
+            <p>À traiter</p>
+        </div>
+    </a>
+    
+    <a href="{{ url_for('kanban.kanban_board') }}" class="action-card">
+        <span class="action-icon">📋</span>
+        <div class="action-info">
+            <h4>Vue Kanban</h4>
+            <p>Gérer visuellement</p>
+        </div>
+    </a>
+    
+    <a href="{{ url_for('history.history_list') }}" class="action-card">
+        <span class="action-icon">📜</span>
+        <div class="action-info">
+            <h4>Historique</h4>
+            <p>Voir tous les emails</p>
+        </div>
+    </a>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('activityChart').getContext('2d');
+    const chartData = JSON.parse('{{ chart_data|tojson|safe }}');
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.labels,
+            datasets: [
+                {
+                    label: 'Envoyés',
+                    data: chartData.sends,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Ouverts',
+                    data: chartData.opens,
+                    borderColor: '#f39c12',
+                    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Réponses',
+                    data: chartData.replies,
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

@@ -306,8 +306,10 @@
         <div class="container">
             <h1>📧 Prospector Email Review</h1>
             <nav>
-                <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Drafts en attente</a>
-                <a href="{{ url_for('history') }}" class="{% if request.endpoint == 'history' %}active{% endif %}">Historique</a>
+                <a href="{{ url_for('main.index') }}" class="{% if request.endpoint == 'main.index' %}active{% endif %}">📬 Drafts</a>
+                <a href="{{ url_for('kanban.kanban_board') }}" class="{% if 'kanban' in (request.endpoint or '') %}active{% endif %}">📋 Kanban</a>
+                <a href="{{ url_for('history.history_list') }}" class="{% if 'history' in (request.endpoint or '') %}active{% endif %}">📜 Historique</a>
+                <a href="{{ url_for('dashboard.dashboard') }}" class="{% if 'dashboard' in (request.endpoint or '') %}active{% endif %}">📊 Dashboard</a>
             </nav>
         </div>
     </header>

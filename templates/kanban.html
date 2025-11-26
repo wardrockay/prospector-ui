@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban - Prospector{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kanban-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .kanban-board {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        min-height: calc(100vh - 250px);
+    }
+    
+    @media (max-width: 1200px) {
+        .kanban-board {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .kanban-board {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .kanban-column {
+        background: #f0f2f5;
+        border-radius: 12px;
+        padding: 15px;
+        min-height: 400px;
+    }
+    
+    .column-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        margin: -15px -15px 15px -15px;
+        border-radius: 12px 12px 0 0;
+        color: white;
+        font-weight: 600;
+    }
+    
+    .column-header.pending { background: #f39c12; }
+    .column-header.sent { background: #3498db; }
+    .column-header.replied { background: #27ae60; }
+    .column-header.bounced { background: #e74c3c; }
+    
+    .column-count {
+        background: rgba(255,255,255,0.3);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+    }
+    
+    .kanban-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .kanban-card {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        cursor: pointer;
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+    }
+    
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    
+    .kanban-card.pending { border-left-color: #f39c12; }
+    .kanban-card.sent { border-left-color: #3498db; }
+    .kanban-card.replied { border-left-color: #27ae60; }
+    .kanban-card.bounced { border-left-color: #e74c3c; }
+    
+    .card-company {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 6px;
+        font-size: 15px;
+    }
+    
+    .card-email {
+        font-size: 13px;
+        color: #7f8c8d;
+        margin-bottom: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .card-subject {
+        font-size: 13px;
+        color: #555;
+        margin-bottom: 10px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .card-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        color: #95a5a6;
+    }
+    
+    .card-stats {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .card-stat {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .card-stat.opened { color: #f39c12; }
+    .card-stat.replied { color: #27ae60; }
+    
+    .empty-column {
+        text-align: center;
+        padding: 40px 20px;
+        color: #95a5a6;
+    }
+    
+    .empty-column svg {
+        width: 48px;
+        height: 48px;
+        opacity: 0.3;
+        margin-bottom: 10px;
+    }
+    
+    /* Keyboard shortcuts hint */
+    .shortcuts-hint {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 12px 20px;
+        margin-bottom: 20px;
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #666;
+    }
+    
+    .shortcut {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .key {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-family: monospace;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="kanban-header">
+    <h2>📋 Vue Kanban</h2>
+    <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-primary">📊 Dashboard</a>
+</div>
+
+<div class="shortcuts-hint">
+    <span style="font-weight: 600;">⌨️ Raccourcis:</span>
+    <span class="shortcut"><span class="key">←</span><span class="key">→</span> Naviguer</span>
+    <span class="shortcut"><span class="key">Enter</span> Ouvrir</span>
+    <span class="shortcut"><span class="key">D</span> Dashboard</span>
+</div>
+
+<div class="kanban-board">
+    <!-- Colonne En attente -->
+    <div class="kanban-column">
+        <div class="column-header pending">
+            <span>📬 En attente</span>
+            <span class="column-count">{{ columns.pending|length }}</span>
+        </div>
+        <div class="kanban-cards">
+            {% if columns.pending %}
+                {% for draft in columns.pending[:20] %}
+                <a href="{{ url_for('main.draft_detail', draft_id=draft.id) }}" class="kanban-card pending" style="text-decoration: none;">
+                    <div class="card-company">{{ draft.partner_name or 'Entreprise' }}</div>
+                    <div class="card-email">{{ draft.to }}</div>
+                    <div class="card-subject">{{ draft.subject }}</div>
+                    <div class="card-meta">
+                        <span>
+                            {% if draft.created_at %}
+                                {{ draft.created_at.strftime('%d/%m') if draft.created_at is not string else draft.created_at[:10] }}
+                            {% endif %}
+                        </span>
+                    </div>
+                </a>
+                {% endfor %}
+                {% if columns.pending|length > 20 %}
+                <div class="empty-column" style="padding: 15px;">
+                    +{{ columns.pending|length - 20 }} autres...
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty-column">
+                    <p>Aucun draft en attente ✨</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Colonne Envoyés -->
+    <div class="kanban-column">
+        <div class="column-header sent">
+            <span>📤 Envoyés</span>
+            <span class="column-count">{{ columns.sent|length }}</span>
+        </div>
+        <div class="kanban-cards">
+            {% if columns.sent %}
+                {% for draft in columns.sent[:20] %}
+                <a href="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}" class="kanban-card sent" style="text-decoration: none;">
+                    <div class="card-company">{{ draft.partner_name or 'Entreprise' }}</div>
+                    <div class="card-email">{{ draft.to }}</div>
+                    <div class="card-subject">{{ draft.subject }}</div>
+                    <div class="card-meta">
+                        <span>
+                            {% if draft.sent_at %}
+                                {{ draft.sent_at.strftime('%d/%m') if draft.sent_at is not string else draft.sent_at[:10] }}
+                            {% endif %}
+                        </span>
+                        <div class="card-stats">
+                            {% if draft.open_count and draft.open_count > 0 %}
+                            <span class="card-stat opened">👀 {{ draft.open_count }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+                {% if columns.sent|length > 20 %}
+                <div class="empty-column" style="padding: 15px;">
+                    +{{ columns.sent|length - 20 }} autres...
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty-column">
+                    <p>Aucun email en attente de réponse</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Colonne Réponses -->
+    <div class="kanban-column">
+        <div class="column-header replied">
+            <span>💬 Réponses</span>
+            <span class="column-count">{{ columns.replied|length }}</span>
+        </div>
+        <div class="kanban-cards">
+            {% if columns.replied %}
+                {% for draft in columns.replied[:20] %}
+                <a href="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}" class="kanban-card replied" style="text-decoration: none;">
+                    <div class="card-company">{{ draft.partner_name or 'Entreprise' }}</div>
+                    <div class="card-email">{{ draft.to }}</div>
+                    <div class="card-subject">{{ draft.subject }}</div>
+                    <div class="card-meta">
+                        <span>
+                            {% if draft.reply_received_at %}
+                                {{ draft.reply_received_at.strftime('%d/%m') if draft.reply_received_at is not string else draft.reply_received_at[:10] }}
+                            {% endif %}
+                        </span>
+                        <span class="card-stat replied">✓ Répondu</span>
+                    </div>
+                </a>
+                {% endfor %}
+                {% if columns.replied|length > 20 %}
+                <div class="empty-column" style="padding: 15px;">
+                    +{{ columns.replied|length - 20 }} autres...
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty-column">
+                    <p>Aucune réponse reçue</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Colonne Bounces -->
+    <div class="kanban-column">
+        <div class="column-header bounced">
+            <span>❌ Bounces</span>
+            <span class="column-count">{{ columns.bounced|length }}</span>
+        </div>
+        <div class="kanban-cards">
+            {% if columns.bounced %}
+                {% for draft in columns.bounced[:20] %}
+                <a href="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}" class="kanban-card bounced" style="text-decoration: none;">
+                    <div class="card-company">{{ draft.partner_name or 'Entreprise' }}</div>
+                    <div class="card-email">{{ draft.to }}</div>
+                    <div class="card-subject">{{ draft.subject }}</div>
+                    <div class="card-meta">
+                        <span>
+                            {% if draft.bounce_received_at %}
+                                {{ draft.bounce_received_at.strftime('%d/%m') if draft.bounce_received_at is not string else draft.bounce_received_at[:10] }}
+                            {% endif %}
+                        </span>
+                        <span style="color: #e74c3c;">Email invalide</span>
+                    </div>
+                </a>
+                {% endfor %}
+                {% if columns.bounced|length > 20 %}
+                <div class="empty-column" style="padding: 15px;">
+                    +{{ columns.bounced|length - 20 }} autres...
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty-column">
+                    <p>Aucun bounce 🎉</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+// Raccourcis clavier pour la navigation
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'd' || e.key === 'D') {
+        window.location.href = '{{ url_for("dashboard.dashboard") }}';
+    }
+});
+</script>
+{% endblock %}

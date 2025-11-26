@@ -398,7 +398,7 @@
         {% if draft.bounce_reason %}
         <p style="margin: 0 0 10px 0; font-size: 13px; color: #666;">Raison: {{ draft.bounce_reason }}</p>
         {% endif %}
-        <form method="POST" action="{{ url_for('resend_bounced_email', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+        <form method="POST" action="{{ url_for('history.resend_bounced_email', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
             <input type="email" name="new_email" placeholder="Nouvelle adresse email valide" required style="flex: 1; padding: 8px; border: 1px solid #e74c3c; border-radius: 4px;">
             <button type="submit" class="btn btn-warning">🔄 Renvoyer à cette adresse</button>
         </form>
@@ -653,7 +653,7 @@
                                 {% endif %}
                             {% else %}
                                 <p style="color: #95a5a6; font-style: italic;">Le contenu de la réponse n'a pas été stocké.</p>
-                                <form method="POST" action="{{ url_for('fetch_reply_endpoint', draft_id=draft.id) }}" style="margin-top: 10px;">
+                                <form method="POST" action="{{ url_for('history.fetch_reply', draft_id=draft.id) }}" style="margin-top: 10px;">
                                     <button type="submit" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">
                                         🔄 Récupérer la réponse depuis Gmail
                                     </button>
@@ -664,7 +664,7 @@
                     {% endif %}
                     
                     {% if not draft.has_reply and not draft.has_bounce and draft.gmail_thread_id %}
-                    <form method="POST" action="{{ url_for('fetch_thread_endpoint', draft_id=draft.id) }}" style="margin-top: 10px; text-align: center;">
+                    <form method="POST" action="{{ url_for('history.fetch_thread', draft_id=draft.id) }}" style="margin-top: 10px; text-align: center;">
                         <button type="submit" class="btn btn-primary" style="font-size: 12px; padding: 8px 16px;">
                             🔄 Récupérer tout le thread de conversation
                         </button>
@@ -681,7 +681,7 @@
     
     <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
         <div class="action-buttons">
-            <a href="{{ url_for('history') }}" class="btn btn-secondary">← Retour à l'historique</a>
+            <a href="{{ url_for('history.history_list') }}" class="btn btn-secondary">← Retour à l'historique</a>
             <button type="button" class="btn btn-primary" onclick="showResendModal()">
                 📨 Renvoyer à une autre adresse
             </button>
@@ -695,7 +695,7 @@
         <h3>📨 Renvoyer ce mail</h3>
         <p style="color: #666; margin-bottom: 20px;">Envoyer le même contenu à une nouvelle adresse email (ex: collègue du prospect)</p>
         
-        <form method="POST" action="{{ url_for('resend_to_another', draft_id=draft.id) }}">
+        <form method="POST" action="{{ url_for('history.resend_to_another', draft_id=draft.id) }}">
             <label for="new_email">Nouvelle adresse email :</label>
             <input type="email" id="new_email" name="new_email" placeholder="collegue@entreprise.com" required>
             

@@ -54,7 +54,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <a href="{{ url_for('view_draft', draft_id=draft.id) }}" class="btn btn-primary">Voir détails</a>
+                        <a href="{{ url_for('main.draft_detail', draft_id=draft.id) }}" class="btn btn-primary">Voir détails</a>
                     </td>
                 </tr>
                 {% endfor %}

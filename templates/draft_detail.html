@@ -169,11 +169,119 @@
         gap: 10px;
         padding-top: 10px;
     }
+    
+    /* Shortcuts hint */
+    .shortcuts-hint {
+        background: #e8f4fd;
+        border: 1px solid #bee5eb;
+        border-radius: 8px;
+        padding: 12px 20px;
+        margin-bottom: 20px;
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #0c5460;
+    }
+    
+    .shortcut {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .key {
+        background: white;
+        border: 1px solid #bee5eb;
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-family: monospace;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    
+    /* Character counter */
+    .char-counter {
+        font-size: 12px;
+        color: #7f8c8d;
+        text-align: right;
+        margin-top: 5px;
+    }
+    
+    .char-counter.warning { color: #f39c12; }
+    .char-counter.danger { color: #e74c3c; }
+    
+    /* Copy button */
+    .copy-btn {
+        background: none;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s;
+    }
+    
+    .copy-btn:hover {
+        background: #f8f9fa;
+        border-color: #3498db;
+    }
+    
+    .copy-btn.copied {
+        background: #d4edda;
+        border-color: #28a745;
+        color: #155724;
+    }
+    
+    /* Notes section */
+    .notes-section {
+        margin-top: 20px;
+        padding: 15px;
+        background: #fffbf0;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+    }
+    
+    .notes-section h4 {
+        margin: 0 0 10px 0;
+        color: #856404;
+        font-size: 14px;
+    }
+    
+    .notes-textarea {
+        width: 100%;
+        min-height: 80px;
+        padding: 10px;
+        border: 1px solid #ffe69c;
+        border-radius: 4px;
+        font-family: inherit;
+        font-size: 14px;
+        resize: vertical;
+        background: white;
+    }
+    
+    .notes-status {
+        font-size: 12px;
+        color: #856404;
+        margin-top: 5px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="card">
+    <!-- Raccourcis clavier -->
+    <div class="shortcuts-hint">
+        <span style="font-weight: 600;">⌨️ Raccourcis:</span>
+        <span class="shortcut"><span class="key">A</span> Approuver/Envoyer</span>
+        <span class="shortcut"><span class="key">R</span> Rejeter</span>
+        <span class="shortcut"><span class="key">E</span> Éditer</span>
+        <span class="shortcut"><span class="key">T</span> Test mail</span>
+        <span class="shortcut"><span class="key">C</span> Copier</span>
+        <span class="shortcut"><span class="key">N</span> Suivant</span>
+        <span class="shortcut"><span class="key">Esc</span> Retour</span>
+    </div>
+
     <div class="draft-header">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h2>📧 Détails du draft</h2>
@@ -239,13 +347,19 @@
     </dl>
     
     <div>
-        <h3 style="margin-bottom: 10px;">Message :</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0;">Message :</h3>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <span class="char-counter" id="charCounter">{{ draft.body|length }} caractères</span>
+                <button type="button" class="copy-btn" id="copyBtn" onclick="copyMailContent()">📋 Copier</button>
+            </div>
+        </div>
         <div class="view-mode" id="viewMode">
-            <div class="draft-body markdown-content">{{ draft.body|markdown }}</div>
+            <div class="draft-body markdown-content" id="mailBody">{{ draft.body|markdown }}</div>
         </div>
         
         <div class="edit-mode" id="editMode">
-            <form method="POST" action="{{ url_for('edit_draft', draft_id=draft.id) }}" class="edit-form">
+            <form method="POST" action="{{ url_for('main.edit_draft', draft_id=draft.id) }}" class="edit-form">
                 <div>
                     <label for="subject">Sujet :</label>
                     <input type="text" id="subject" name="subject" value="{{ draft.subject }}" required>
@@ -253,7 +367,8 @@
                 
                 <div>
                     <label for="body">Corps du message (Markdown supporté) :</label>
-                    <textarea id="body" name="body" required>{{ draft.body }}</textarea>
+                    <textarea id="body" name="body" required oninput="updateCharCounter()">{{ draft.body }}</textarea>
+                    <div class="char-counter" id="editCharCounter">{{ draft.body|length }} caractères</div>
                 </div>
                 
                 <div class="edit-actions">
@@ -262,6 +377,13 @@
                 </div>
             </form>
         </div>
+    </div>
+    
+    <!-- Section Notes -->
+    <div class="notes-section">
+        <h4>📝 Notes internes (non visibles dans le mail)</h4>
+        <textarea class="notes-textarea" id="notesTextarea" placeholder="Ajoutez des notes sur ce prospect..." oninput="saveNotes()">{{ draft.notes or '' }}</textarea>
+        <div class="notes-status" id="notesStatus"></div>
     </div>
     
     <div class="actions">
@@ -274,23 +396,23 @@
         <button type="button" class="btn btn-primary" onclick="toggleEdit()">✏️ Modifier</button>
         
         {% if draft.x_external_id %}
-        <form method="POST" action="{{ url_for('regenerate_draft', draft_id=draft.id) }}" style="display: inline;">
+        <form method="POST" action="{{ url_for('main.regenerate_draft', draft_id=draft.id) }}" style="display: inline;">
             <button type="submit" class="btn btn-primary" onclick="return confirm('Régénérer ce mail depuis Odoo ? Un nouveau draft sera créé.')">🔄 Régénérer</button>
         </form>
         {% endif %}
         
-        <form method="POST" action="{{ url_for('reject_draft', draft_id=draft.id) }}" style="display: inline;">
+        <form method="POST" action="{{ url_for('main.reject_draft', draft_id=draft.id) }}" style="display: inline;">
             <button type="submit" class="btn btn-danger" onclick="return confirm('Êtes-vous sûr de vouloir rejeter ce draft ?')">❌ Rejeter</button>
         </form>
         
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour à la liste</a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-secondary">← Retour à la liste</a>
     </div>
     
     <div class="confirm-send" id="confirmSend">
         <p><strong>⚠️ Confirmer l'envoi</strong></p>
         <p>Êtes-vous sûr de vouloir envoyer cet email à <strong>{{ draft.to }}</strong> ?</p>
         <p>L'email sera envoyé avec le pixel de tracking et la signature Gmail configurée.</p>
-        <form method="POST" action="{{ url_for('send_draft', draft_id=draft.id) }}" style="display: flex; gap: 10px;">
+        <form method="POST" action="{{ url_for('main.send_draft', draft_id=draft.id) }}" style="display: flex; gap: 10px;">
             <button type="submit" class="btn btn-success">Oui, envoyer maintenant</button>
             <button type="button" class="btn btn-secondary" onclick="hideConfirm()">Annuler</button>
         </form>
@@ -299,7 +421,7 @@
     <div class="test-mail" id="testMail">
         <p><strong>🧪 Envoyer un mail de test</strong></p>
         <p>Entrez une adresse email pour recevoir ce mail en test (sans tracking, sans mise à jour du statut) :</p>
-        <form method="POST" action="{{ url_for('send_test_draft', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center;">
+        <form method="POST" action="{{ url_for('main.send_test_draft', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center;">
             <input type="email" name="test_email" placeholder="votre.email@example.com" required style="flex: 1; padding: 8px; border: 1px solid #2196f3; border-radius: 4px;">
             <button type="submit" class="btn btn-info">Envoyer le test</button>
             <button type="button" class="btn btn-secondary" onclick="hideTestMail()">Annuler</button>
@@ -310,7 +432,7 @@
         <p><strong>📧 Changer l'adresse de destination</strong></p>
         <p>L'adresse actuelle <strong>{{ draft.to }}</strong> n'est pas valide ou vous souhaitez envoyer à une autre adresse.</p>
         <p>Entrez la nouvelle adresse email :</p>
-        <form method="POST" action="{{ url_for('change_email_and_send', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center;">
+        <form method="POST" action="{{ url_for('main.change_email_and_send', draft_id=draft.id) }}" style="display: flex; gap: 10px; align-items: center;">
             <input type="email" name="new_email" placeholder="nouvelle.adresse@example.com" required style="flex: 1; padding: 8px; border: 1px solid #ff9800; border-radius: 4px;">
             <button type="submit" class="btn btn-warning">Mettre à jour et envoyer</button>
             <button type="button" class="btn btn-secondary" onclick="hideChangeEmail()">Annuler</button>
@@ -375,5 +497,119 @@
         viewMode.classList.remove('hidden');
         editMode.classList.remove('active');
     }
+    
+    // Compteur de caractères
+    function updateCharCounter() {
+        const textarea = document.getElementById('body');
+        const counter = document.getElementById('editCharCounter');
+        const length = textarea.value.length;
+        
+        counter.textContent = length + ' caractères';
+        counter.classList.remove('warning', 'danger');
+        
+        if (length > 2000) {
+            counter.classList.add('danger');
+        } else if (length > 1500) {
+            counter.classList.add('warning');
+        }
+    }
+    
+    // Copier le contenu du mail
+    function copyMailContent() {
+        const subject = '{{ draft.subject|replace("'", "\\'") }}';
+        const body = `{{ draft.body|replace("\\n", "\\\\n")|replace("'", "\\'") }}`;
+        const fullContent = `Sujet: ${subject}\n\n${body}`;
+        
+        navigator.clipboard.writeText(fullContent).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.textContent = '✓ Copié!';
+            btn.classList.add('copied');
+            
+            setTimeout(() => {
+                btn.textContent = '📋 Copier';
+                btn.classList.remove('copied');
+            }, 2000);
+        });
+    }
+    
+    // Sauvegarder les notes (avec debounce)
+    let notesTimeout;
+    function saveNotes() {
+        clearTimeout(notesTimeout);
+        const status = document.getElementById('notesStatus');
+        status.textContent = 'Enregistrement...';
+        
+        notesTimeout = setTimeout(() => {
+            const notes = document.getElementById('notesTextarea').value;
+            
+            fetch('/api/draft/{{ draft.id }}/notes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ notes: notes })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    status.textContent = '✓ Notes enregistrées';
+                    setTimeout(() => { status.textContent = ''; }, 2000);
+                } else {
+                    status.textContent = '❌ Erreur';
+                }
+            })
+            .catch(() => {
+                status.textContent = '❌ Erreur de connexion';
+            });
+        }, 1000);
+    }
+    
+    // Raccourcis clavier
+    document.addEventListener('keydown', function(e) {
+        // Ignorer si on est dans un champ de saisie
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+            if (e.key === 'Escape') {
+                e.target.blur();
+                cancelEdit();
+            }
+            return;
+        }
+        
+        switch(e.key.toLowerCase()) {
+            case 'a':
+                // Approuver/Envoyer
+                showConfirm();
+                break;
+            case 'r':
+                // Rejeter
+                if (confirm('Êtes-vous sûr de vouloir rejeter ce draft ?')) {
+                    document.querySelector('form[action*="reject"]').submit();
+                }
+                break;
+            case 'e':
+                // Éditer
+                toggleEdit();
+                break;
+            case 't':
+                // Test mail
+                showTestMail();
+                document.querySelector('#testMail input[type="email"]').focus();
+                break;
+            case 'c':
+                // Copier
+                copyMailContent();
+                break;
+            case 'n':
+                // Suivant (retour à la liste pour voir le suivant)
+                window.location.href = '{{ url_for("main.index") }}';
+                break;
+            case 'escape':
+                // Fermer les modales / retour
+                hideConfirm();
+                hideTestMail();
+                hideChangeEmail();
+                break;
+        }
+    });
 </script>
 {% endblock %}
