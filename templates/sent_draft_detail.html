@@ -251,6 +251,66 @@
         padding-bottom: 10px;
         border-bottom: 2px solid #e0e0e0;
     }
+    
+    /* Modal pour renvoi */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal-overlay.active {
+        display: flex;
+    }
+    
+    .modal-content {
+        background-color: white;
+        padding: 30px;
+        border-radius: 8px;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .modal-content h3 {
+        margin-top: 0;
+        margin-bottom: 20px;
+    }
+    
+    .modal-content label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
+    
+    .modal-content input[type="email"] {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+        margin-bottom: 20px;
+    }
+    
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
 </style>
 {% endblock %}
 
@@ -620,7 +680,55 @@
     </div>
     
     <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
-        <a href="{{ url_for('history') }}" class="btn btn-secondary">← Retour à l'historique</a>
+        <div class="action-buttons">
+            <a href="{{ url_for('history') }}" class="btn btn-secondary">← Retour à l'historique</a>
+            <button type="button" class="btn btn-primary" onclick="showResendModal()">
+                📨 Renvoyer à une autre adresse
+            </button>
+        </div>
     </div>
 </div>
+
+<!-- Modal de renvoi -->
+<div id="resendModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>📨 Renvoyer ce mail</h3>
+        <p style="color: #666; margin-bottom: 20px;">Envoyer le même contenu à une nouvelle adresse email (ex: collègue du prospect)</p>
+        
+        <form method="POST" action="{{ url_for('resend_to_another', draft_id=draft.id) }}">
+            <label for="new_email">Nouvelle adresse email :</label>
+            <input type="email" id="new_email" name="new_email" placeholder="collegue@entreprise.com" required>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" name="update_original" value="1">
+                    <span>Mettre à jour l'adresse du prospect original</span>
+                </label>
+                <small style="color: #7f8c8d; display: block; margin-left: 24px;">Si coché, les futures relances seront envoyées à cette nouvelle adresse</small>
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="hideResendModal()">Annuler</button>
+                <button type="submit" class="btn btn-success">✉️ Envoyer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showResendModal() {
+    document.getElementById('resendModal').classList.add('active');
+}
+
+function hideResendModal() {
+    document.getElementById('resendModal').classList.remove('active');
+}
+
+// Fermer le modal en cliquant à l'extérieur
+document.getElementById('resendModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideResendModal();
+    }
+});
+</script>
 {% endblock %}

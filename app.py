@@ -320,6 +320,77 @@ def send_test_draft(draft_id):
         return redirect(url_for("view_draft", draft_id=draft_id))
 
 
+@app.route("/resend-to-another/<draft_id>", methods=["POST"])
+def resend_to_another(draft_id):
+    """Renvoie un mail déjà envoyé à une autre adresse email."""
+    try:
+        new_email = request.form.get("new_email", "").strip()
+        update_original = request.form.get("update_original") == "1"
+        
+        if not new_email:
+            flash("Adresse email manquante", "error")
+            return redirect(url_for("view_sent_draft", draft_id=draft_id))
+        
+        if not SEND_MAIL_SERVICE_URL:
+            flash("Service d'envoi non configuré (SEND_MAIL_SERVICE_URL manquant)", "error")
+            return redirect(url_for("view_sent_draft", draft_id=draft_id))
+        
+        # Récupérer le draft original
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Draft non trouvé", "error")
+            return redirect(url_for("history"))
+        
+        draft_data = doc.to_dict()
+        original_to = draft_data.get("to", "")
+        
+        # Générer l'ID token pour authentifier l'appel
+        id_token = get_id_token(SEND_MAIL_SERVICE_URL)
+        
+        # Appeler le service d'envoi avec la nouvelle adresse
+        response = requests.post(
+            f"{SEND_MAIL_SERVICE_URL}/resend-to-another",
+            json={
+                "draft_id": draft_id,
+                "new_email": new_email
+            },
+            headers={"Authorization": f"Bearer {id_token}"},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            flash(f"Mail renvoyé avec succès à {new_email}!", "success")
+            
+            # Si on veut mettre à jour l'adresse originale
+            if update_original:
+                # Mettre à jour l'adresse du draft
+                doc_ref.update({
+                    "to": new_email,
+                    "original_to": original_to,  # Sauvegarder l'ancienne adresse
+                    "email_forwarded_at": datetime.utcnow()
+                })
+                
+                # Mettre à jour les relances planifiées (à venir uniquement)
+                followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", draft_id).where("status", "==", "scheduled")
+                for followup_doc in followups_ref.stream():
+                    followup_doc.reference.update({"to": new_email})
+                
+                flash(f"L'adresse du prospect a été mise à jour. Les futures relances seront envoyées à {new_email}.", "info")
+            
+            return redirect(url_for("view_sent_draft", draft_id=draft_id))
+        else:
+            error_msg = response.json().get("error", "Erreur inconnue")
+            flash(f"Erreur lors du renvoi: {error_msg}", "error")
+            return redirect(url_for("view_sent_draft", draft_id=draft_id))
+    
+    except Exception as e:
+        flash(f"Erreur lors du renvoi: {str(e)}", "error")
+        return redirect(url_for("view_sent_draft", draft_id=draft_id))
+
+
 @app.route("/send/<draft_id>", methods=["POST"])
 def send_draft(draft_id):
     """Envoie un draft via le service send_mail."""
