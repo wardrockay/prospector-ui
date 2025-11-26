@@ -487,7 +487,7 @@
                                 {% if msg.subject %}
                                 <div class="message-subject">{{ msg.subject }}</div>
                                 {% endif %}
-                                <div class="message-body">{{ msg.body }}</div>
+                                <div class="message-body markdown-content">{{ msg.body|markdown }}</div>
                             </div>
                         {% else %}
                             <!-- Message reçu du prospect -->
@@ -500,7 +500,7 @@
                                 {% if msg.subject %}
                                 <div class="message-subject">{{ msg.subject }}</div>
                                 {% endif %}
-                                <div class="message-body">{{ msg.body }}</div>
+                                <div class="message-body markdown-content">{{ msg.body|markdown }}</div>
                             </div>
                         {% endif %}
                     {% endfor %}
@@ -519,7 +519,7 @@
                         </div>
                         <div class="message-from">À : {{ draft.to }}</div>
                         <div class="message-subject">{{ draft.subject }}</div>
-                        <div class="message-body">{{ draft.body }}</div>
+                        <div class="message-body markdown-content">{{ draft.body|markdown }}</div>
                     </div>
                     
                     <!-- Relances envoyées (affichées chronologiquement) -->
@@ -538,7 +538,7 @@
                             {% if followup_msg.subject %}
                             <div class="message-subject">{{ followup_msg.subject }}</div>
                             {% endif %}
-                            <div class="message-body">{{ followup_msg.body or followup_msg.message or 'Relance automatique' }}</div>
+                            <div class="message-body markdown-content">{{ (followup_msg.body or followup_msg.message or 'Relance automatique')|markdown }}</div>
                         </div>
                         {% endfor %}
                     {% endif %}
@@ -578,16 +578,16 @@
                         {% if draft.reply_subject %}
                         <div class="message-subject">{{ draft.reply_subject }}</div>
                         {% endif %}
-                        <div class="message-body">
+                        <div class="message-body markdown-content">
                             {% if draft.reply_message %}
                                 {% set clean_reply = draft.reply_message.split('Le ')[0].split('On ')[0].split('From:')[0].split('De :')[0].split('-----')[0].split('___')[0].strip() %}
-                                {{ clean_reply if clean_reply else draft.reply_message }}
+                                {{ clean_reply|markdown if clean_reply else draft.reply_message|markdown }}
                                 
                                 {% if draft.reply_message|length > clean_reply|length + 50 %}
                                 <div class="quoted-text">
                                     <details>
                                         <summary style="cursor: pointer; color: #7f8c8d; font-size: 11px;">Afficher le message cité...</summary>
-                                        {{ draft.reply_message[clean_reply|length:] }}
+                                        {{ draft.reply_message[clean_reply|length:]|markdown }}
                                     </details>
                                 </div>
                                 {% endif %}

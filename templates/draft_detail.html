@@ -241,7 +241,7 @@
     <div>
         <h3 style="margin-bottom: 10px;">Message :</h3>
         <div class="view-mode" id="viewMode">
-            <div class="draft-body">{{ draft.body }}</div>
+            <div class="draft-body markdown-content">{{ draft.body|markdown }}</div>
         </div>
         
         <div class="edit-mode" id="editMode">
@@ -252,7 +252,7 @@
                 </div>
                 
                 <div>
-                    <label for="body">Corps du message :</label>
+                    <label for="body">Corps du message (Markdown supporté) :</label>
                     <textarea id="body" name="body" required>{{ draft.body }}</textarea>
                 </div>
                 

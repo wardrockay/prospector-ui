@@ -1,5 +1,7 @@
 import os
 import requests
+import markdown as md
+from markupsafe import Markup
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from google.cloud import firestore
@@ -7,6 +9,15 @@ import google.auth
 from google.auth.transport.requests import Request as GoogleRequest
 
 app = Flask(__name__)
+
+# Filtre Jinja2 pour le Markdown
+@app.template_filter('markdown')
+def markdown_filter(text):
+    """Convertit le texte Markdown en HTML"""
+    if not text:
+        return ""
+    html = md.markdown(text, extensions=['nl2br', 'tables', 'fenced_code', 'sane_lists'])
+    return Markup(html)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Firestore client
