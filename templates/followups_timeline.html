@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+
+{% block title %}Relances - Timeline{% endblock %}
+
+{% block extra_css %}
+<style>
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+    
+    .stats-bar {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .stat-item {
+        background: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .stat-item .number {
+        font-size: 24px;
+        font-weight: 700;
+    }
+    
+    .stat-item .label {
+        font-size: 13px;
+        color: #7f8c8d;
+    }
+    
+    .stat-item.scheduled .number { color: #f39c12; }
+    .stat-item.sent .number { color: #27ae60; }
+    .stat-item.cancelled .number { color: #95a5a6; }
+    
+    .filter-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+    }
+    
+    .filter-tab {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        background: #f0f2f5;
+        color: #555;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    
+    .filter-tab:hover {
+        background: #e0e2e5;
+    }
+    
+    .filter-tab.active {
+        background: #3498db;
+        color: white;
+    }
+    
+    .filter-tab .count {
+        background: rgba(0,0,0,0.1);
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-left: 6px;
+    }
+    
+    .filter-tab.active .count {
+        background: rgba(255,255,255,0.2);
+    }
+    
+    /* Timeline verticale */
+    .timeline-container {
+        position: relative;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    
+    .timeline-line {
+        position: absolute;
+        left: 50px;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: linear-gradient(to bottom, #f39c12, #27ae60, #95a5a6);
+        border-radius: 2px;
+    }
+    
+    @media (max-width: 768px) {
+        .timeline-line {
+            left: 20px;
+        }
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-left: 90px;
+        padding-bottom: 30px;
+    }
+    
+    @media (max-width: 768px) {
+        .timeline-item {
+            padding-left: 50px;
+        }
+    }
+    
+    .timeline-marker {
+        position: absolute;
+        left: 38px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        z-index: 1;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    @media (max-width: 768px) {
+        .timeline-marker {
+            left: 8px;
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+        }
+    }
+    
+    .timeline-marker.scheduled {
+        background: #f39c12;
+        color: white;
+    }
+    
+    .timeline-marker.sent {
+        background: #27ae60;
+        color: white;
+    }
+    
+    .timeline-marker.cancelled {
+        background: #95a5a6;
+        color: white;
+    }
+    
+    .timeline-date {
+        position: absolute;
+        left: -60px;
+        top: 4px;
+        font-size: 12px;
+        color: #7f8c8d;
+        text-align: right;
+        width: 90px;
+        display: none;
+    }
+    
+    @media (min-width: 1100px) {
+        .timeline-date {
+            display: block;
+        }
+        
+        .timeline-container {
+            margin-left: 100px;
+        }
+    }
+    
+    .timeline-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+    }
+    
+    .timeline-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        transform: translateX(4px);
+    }
+    
+    .timeline-card.scheduled {
+        border-left-color: #f39c12;
+    }
+    
+    .timeline-card.sent {
+        border-left-color: #27ae60;
+    }
+    
+    .timeline-card.cancelled {
+        border-left-color: #95a5a6;
+    }
+    
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    
+    .card-title {
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 16px;
+    }
+    
+    .card-recipient {
+        font-size: 14px;
+        color: #7f8c8d;
+        margin-top: 4px;
+    }
+    
+    .card-status {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .card-status.scheduled {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .card-status.sent {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .card-status.cancelled {
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    
+    .card-meta {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #555;
+        margin-bottom: 12px;
+    }
+    
+    .card-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .card-subject {
+        background: #f8f9fa;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        color: #555;
+        margin-bottom: 12px;
+    }
+    
+    .card-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .btn-small {
+        padding: 6px 14px;
+        font-size: 13px;
+        border-radius: 6px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .btn-view {
+        background: #3498db;
+        color: white;
+    }
+    
+    .btn-view:hover {
+        background: #2980b9;
+    }
+    
+    .btn-cancel {
+        background: #e74c3c;
+        color: white;
+    }
+    
+    .btn-cancel:hover {
+        background: #c0392b;
+    }
+    
+    /* Séparateur de date */
+    .date-separator {
+        position: relative;
+        padding-left: 90px;
+        padding-bottom: 15px;
+        padding-top: 15px;
+    }
+    
+    @media (max-width: 768px) {
+        .date-separator {
+            padding-left: 50px;
+        }
+    }
+    
+    .date-separator-content {
+        background: #f0f2f5;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #555;
+        display: inline-block;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #7f8c8d;
+    }
+    
+    .empty-state svg {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 20px;
+        opacity: 0.3;
+    }
+    
+    .empty-state h3 {
+        margin-bottom: 10px;
+        color: #555;
+    }
+    
+    /* Badge J+ */
+    .days-badge {
+        background: #9b59b6;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    
+    /* Countdown */
+    .countdown {
+        font-size: 12px;
+        color: #e74c3c;
+        font-weight: 600;
+    }
+    
+    .countdown.soon {
+        color: #f39c12;
+    }
+    
+    .countdown.future {
+        color: #27ae60;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="timeline-header">
+    <h2>🔄 Timeline des Relances</h2>
+    <div class="stats-bar">
+        <div class="stat-item scheduled">
+            <span class="number">{{ stats.scheduled }}</span>
+            <span class="label">Planifiées</span>
+        </div>
+        <div class="stat-item sent">
+            <span class="number">{{ stats.sent }}</span>
+            <span class="label">Envoyées</span>
+        </div>
+        <div class="stat-item cancelled">
+            <span class="number">{{ stats.cancelled }}</span>
+            <span class="label">Annulées</span>
+        </div>
+    </div>
+</div>
+
+<div class="filter-tabs">
+    <a href="{{ url_for('followups.timeline') }}" class="filter-tab {% if current_filter == 'all' %}active{% endif %}">
+        Tout <span class="count">{{ stats.total }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', status='scheduled') }}" class="filter-tab {% if current_filter == 'scheduled' %}active{% endif %}">
+        ⏱ Planifiées <span class="count">{{ stats.scheduled }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', status='sent') }}" class="filter-tab {% if current_filter == 'sent' %}active{% endif %}">
+        ✓ Envoyées <span class="count">{{ stats.sent }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', status='cancelled') }}" class="filter-tab {% if current_filter == 'cancelled' %}active{% endif %}">
+        ✗ Annulées <span class="count">{{ stats.cancelled }}</span>
+    </a>
+</div>
+
+{% if followups %}
+<div class="timeline-container">
+    <div class="timeline-line"></div>
+    
+    {% set ns = namespace(last_date='') %}
+    
+    {% for followup in followups %}
+        {% set scheduled_date = followup.scheduled_for.strftime('%Y-%m-%d') if followup.scheduled_for is not string else followup.scheduled_for[:10] %}
+        
+        {% if scheduled_date != ns.last_date %}
+            {% set ns.last_date = scheduled_date %}
+            <div class="date-separator">
+                <span class="date-separator-content">
+                    📅 {{ followup.scheduled_for.strftime('%A %d %B %Y') if followup.scheduled_for is not string else followup.scheduled_for[:10] }}
+                </span>
+            </div>
+        {% endif %}
+        
+        <div class="timeline-item">
+            <div class="timeline-marker {{ followup.status }}">
+                {% if followup.status == 'scheduled' %}⏱
+                {% elif followup.status == 'sent' %}✓
+                {% else %}✗{% endif %}
+            </div>
+            
+            <div class="timeline-date">
+                {{ followup.scheduled_for.strftime('%H:%M') if followup.scheduled_for is not string else '' }}
+            </div>
+            
+            <div class="timeline-card {{ followup.status }}">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">
+                            {% if followup.draft %}
+                                {{ followup.draft.partner_name or 'Entreprise' }}
+                            {% else %}
+                                Relance #{{ followup.id[:8] }}
+                            {% endif %}
+                            <span class="days-badge">J+{{ followup.days_after_initial or '?' }}</span>
+                        </div>
+                        <div class="card-recipient">
+                            📧 {{ followup.to or (followup.draft.to if followup.draft else 'N/A') }}
+                        </div>
+                    </div>
+                    <span class="card-status {{ followup.status }}">
+                        {% if followup.status == 'scheduled' %}⏱ Planifiée
+                        {% elif followup.status == 'sent' %}✓ Envoyée
+                        {% else %}✗ Annulée{% endif %}
+                    </span>
+                </div>
+                
+                <div class="card-meta">
+                    <span class="card-meta-item">
+                        📆 Prévue: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
+                    </span>
+                    {% if followup.status == 'sent' and followup.sent_at %}
+                    <span class="card-meta-item">
+                        ✓ Envoyée: {{ followup.sent_at.strftime('%d/%m/%Y %H:%M') if followup.sent_at is not string else followup.sent_at }}
+                    </span>
+                    {% endif %}
+                    {% if followup.status == 'cancelled' and followup.cancelled_at %}
+                    <span class="card-meta-item">
+                        ✗ Annulée: {{ followup.cancelled_at.strftime('%d/%m/%Y %H:%M') if followup.cancelled_at is not string else followup.cancelled_at }}
+                    </span>
+                    {% endif %}
+                </div>
+                
+                {% if followup.subject or (followup.draft and followup.draft.subject) %}
+                <div class="card-subject">
+                    <strong>Sujet:</strong> {{ followup.subject or followup.draft.subject }}
+                </div>
+                {% endif %}
+                
+                <div class="card-actions">
+                    {% if followup.draft %}
+                    <a href="{{ url_for('history.sent_draft_detail', draft_id=followup.draft.id) }}" class="btn-small btn-view">
+                        👁️ Voir le mail original
+                    </a>
+                    {% endif %}
+                    
+                    {% if followup.status == 'scheduled' %}
+                    <form method="POST" action="{{ url_for('followups.cancel_followup', followup_id=followup.id) }}" style="display: inline;">
+                        <button type="submit" class="btn-small btn-cancel" onclick="return confirm('Êtes-vous sûr de vouloir annuler cette relance ?')">
+                            ✗ Annuler
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 6v6l4 2"/>
+    </svg>
+    <h3>Aucune relance</h3>
+    <p>Il n'y a pas de relances correspondant à ce filtre.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -308,6 +308,7 @@
             <nav>
                 <a href="{{ url_for('main.index') }}" class="{% if request.endpoint == 'main.index' %}active{% endif %}">📬 Drafts</a>
                 <a href="{{ url_for('kanban.kanban_board') }}" class="{% if 'kanban' in (request.endpoint or '') %}active{% endif %}">📋 Kanban</a>
+                <a href="{{ url_for('followups.timeline') }}" class="{% if 'followups' in (request.endpoint or '') %}active{% endif %}">🔄 Relances</a>
                 <a href="{{ url_for('history.history_list') }}" class="{% if 'history' in (request.endpoint or '') %}active{% endif %}">📜 Historique</a>
                 <a href="{{ url_for('dashboard.dashboard') }}" class="{% if 'dashboard' in (request.endpoint or '') %}active{% endif %}">📊 Dashboard</a>
             </nav>

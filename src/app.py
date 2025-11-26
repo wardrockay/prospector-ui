@@ -16,6 +16,7 @@ import markdown as md
 from src.blueprints import (
     api_bp,
     dashboard_bp,
+    followups_bp,
     history_bp,
     kanban_bp,
     main_bp,
@@ -62,6 +63,7 @@ def create_app() -> Flask:
     app.register_blueprint(history_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(kanban_bp)
+    app.register_blueprint(followups_bp)
     
     # Error handlers
     @app.errorhandler(404)

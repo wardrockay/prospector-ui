@@ -1004,7 +1004,19 @@ def dashboard():
         for doc in sent_drafts:
             data = doc.to_dict()
             
-            if data.get("open_count", 0) > 0:
+            # Vérifier les ouvertures depuis la collection des pixels
+            pixel_id = data.get("pixel_id")
+            open_count = 0
+            first_opened_at = None
+            
+            if pixel_id:
+                pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
+                if pixel_doc.exists:
+                    pixel_data = pixel_doc.to_dict()
+                    open_count = pixel_data.get("open_count", 0)
+                    first_opened_at = pixel_data.get("first_opened_at")
+            
+            if open_count > 0:
                 total_opened += 1
             if data.get("has_reply"):
                 total_replied += 1
@@ -1019,12 +1031,12 @@ def dashboard():
                     date_key = str(sent_at)[:10]
                 sends_by_date[date_key] += 1
             
-            first_opened = data.get("first_opened_at")
-            if first_opened:
-                if hasattr(first_opened, 'strftime'):
-                    date_key = first_opened.strftime("%Y-%m-%d")
+            # Utiliser first_opened_at récupéré depuis le pixel
+            if first_opened_at:
+                if hasattr(first_opened_at, 'strftime'):
+                    date_key = first_opened_at.strftime("%Y-%m-%d")
                 else:
-                    date_key = str(first_opened)[:10]
+                    date_key = str(first_opened_at)[:10]
                 opens_by_date[date_key] += 1
             
             reply_at = data.get("reply_received_at")
@@ -1121,3 +1133,90 @@ def kanban_board():
     except Exception as e:
         flash(f"Erreur lors du chargement du kanban: {str(e)}", "error")
         return redirect(url_for("main.index"))
+
+
+# ============================================================================
+# Followups Timeline Blueprint
+# ============================================================================
+
+followups_bp = Blueprint("followups", __name__, url_prefix="/followups")
+
+
+@followups_bp.route("/")
+def timeline():
+    """Show followups timeline view."""
+    try:
+        # Récupérer tous les followups triés par date planifiée (plus ancien en haut)
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(200)
+        
+        followups = []
+        draft_cache = {}
+        
+        for doc in followups_ref.stream():
+            followup_data = doc.to_dict()
+            followup_data["id"] = doc.id
+            
+            # Récupérer les infos du draft parent (avec cache)
+            draft_id = followup_data.get("draft_id")
+            if draft_id:
+                if draft_id not in draft_cache:
+                    draft_doc = db.collection(DRAFT_COLLECTION).document(draft_id).get()
+                    if draft_doc.exists:
+                        draft_cache[draft_id] = draft_doc.to_dict()
+                        draft_cache[draft_id]["id"] = draft_id
+                    else:
+                        draft_cache[draft_id] = None
+                
+                followup_data["draft"] = draft_cache.get(draft_id)
+            
+            followups.append(followup_data)
+        
+        # Statistiques
+        stats = {
+            "total": len(followups),
+            "scheduled": len([f for f in followups if f.get("status") == "scheduled"]),
+            "sent": len([f for f in followups if f.get("status") == "sent"]),
+            "cancelled": len([f for f in followups if f.get("status") == "cancelled"])
+        }
+        
+        # Filtrer par statut si demandé
+        filter_status = request.args.get("status", "all")
+        if filter_status != "all":
+            followups = [f for f in followups if f.get("status") == filter_status]
+        
+        return render_template("followups_timeline.html", followups=followups, stats=stats, current_filter=filter_status)
+    
+    except Exception as e:
+        flash(f"Erreur lors du chargement des relances: {str(e)}", "error")
+        return redirect(url_for("main.index"))
+
+
+@followups_bp.route("/cancel/<followup_id>", methods=["POST"])
+def cancel_followup(followup_id: str):
+    """Cancel a scheduled followup."""
+    try:
+        doc_ref = db.collection(FOLLOWUP_COLLECTION).document(followup_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Relance non trouvée", "error")
+            return redirect(url_for("followups.timeline"))
+        
+        followup_data = doc.to_dict()
+        
+        if followup_data.get("status") != "scheduled":
+            flash("Cette relance ne peut pas être annulée", "warning")
+            return redirect(url_for("followups.timeline"))
+        
+        doc_ref.update({
+            "status": "cancelled",
+            "cancelled_at": datetime.utcnow(),
+            "cancelled_reason": "Annulée manuellement"
+        })
+        
+        flash("Relance annulée avec succès", "success")
+        return redirect(url_for("followups.timeline"))
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("followups.timeline"))
