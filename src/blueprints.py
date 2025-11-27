@@ -596,6 +596,42 @@ def delete_rejected():
         return redirect(url_for("history.history_list"))
 
 
+@api_bp.route("/drafts/delete-multiple", methods=["POST"])
+def delete_multiple_drafts():
+    """Delete multiple drafts by IDs."""
+    try:
+        data = request.get_json()
+        draft_ids = data.get("draft_ids", [])
+        
+        if not draft_ids:
+            return jsonify({"success": False, "error": "Aucun draft spécifié"}), 400
+        
+        deleted_count = 0
+        errors = []
+        
+        for draft_id in draft_ids:
+            try:
+                doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+                doc = doc_ref.get()
+                
+                if doc.exists:
+                    doc_ref.delete()
+                    deleted_count += 1
+                else:
+                    errors.append(f"Draft {draft_id} non trouvé")
+            except Exception as e:
+                errors.append(f"Erreur pour {draft_id}: {str(e)}")
+        
+        return jsonify({
+            "success": True,
+            "deleted_count": deleted_count,
+            "errors": errors if errors else None
+        })
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ============================================================================
 # History Blueprint
 # ============================================================================
@@ -1018,6 +1054,16 @@ def dashboard():
             
             if open_count > 0:
                 total_opened += 1
+                
+                # Pour le graphique : utiliser first_opened_at, sinon sent_at comme fallback
+                open_date = first_opened_at if first_opened_at else data.get("sent_at")
+                if open_date:
+                    if hasattr(open_date, 'strftime'):
+                        date_key = open_date.strftime("%Y-%m-%d")
+                    else:
+                        date_key = str(open_date)[:10]
+                    opens_by_date[date_key] += 1
+                    
             if data.get("has_reply"):
                 total_replied += 1
             if data.get("has_bounce"):
@@ -1030,14 +1076,6 @@ def dashboard():
                 else:
                     date_key = str(sent_at)[:10]
                 sends_by_date[date_key] += 1
-            
-            # Utiliser first_opened_at récupéré depuis le pixel
-            if first_opened_at:
-                if hasattr(first_opened_at, 'strftime'):
-                    date_key = first_opened_at.strftime("%Y-%m-%d")
-                else:
-                    date_key = str(first_opened_at)[:10]
-                opens_by_date[date_key] += 1
             
             reply_at = data.get("reply_received_at")
             if reply_at and sent_at:
@@ -1146,8 +1184,8 @@ followups_bp = Blueprint("followups", __name__, url_prefix="/followups")
 def timeline():
     """Show followups timeline view."""
     try:
-        # Récupérer tous les followups triés par date planifiée (plus ancien en haut)
-        followups_ref = db.collection(FOLLOWUP_COLLECTION).order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(200)
+        # Récupérer tous les followups triés par date planifiée (plus proche en premier)
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).order_by("scheduled_for", direction=firestore.Query.DESCENDING).limit(200)
         
         followups = []
         draft_cache = {}

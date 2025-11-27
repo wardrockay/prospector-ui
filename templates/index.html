@@ -2,6 +2,103 @@
 
 {% block title %}Drafts en attente - Prospector{% endblock %}
 
+{% block extra_css %}
+<style>
+    .selection-bar {
+        display: none;
+        background: #2c3e50;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        align-items: center;
+        justify-content: space-between;
+        animation: slideDown 0.2s ease;
+    }
+    
+    .selection-bar.active {
+        display: flex;
+    }
+    
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .selection-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .selection-count {
+        font-weight: 600;
+        font-size: 16px;
+    }
+    
+    .selection-actions {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .btn-delete-selected {
+        background: #e74c3c;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    
+    .btn-delete-selected:hover {
+        background: #c0392b;
+    }
+    
+    .btn-cancel-selection {
+        background: transparent;
+        color: white;
+        border: 1px solid rgba(255,255,255,0.3);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .btn-cancel-selection:hover {
+        background: rgba(255,255,255,0.1);
+    }
+    
+    .checkbox-cell {
+        width: 40px;
+        text-align: center;
+    }
+    
+    .draft-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #3498db;
+    }
+    
+    .select-all-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #3498db;
+    }
+    
+    tr.selected {
+        background-color: #ebf5fb !important;
+    }
+    
+    tr:hover {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -11,10 +108,24 @@
         </div>
     </div>
     
+    <!-- Barre de sélection -->
+    <div class="selection-bar" id="selectionBar">
+        <div class="selection-info">
+            <span class="selection-count"><span id="selectedCount">0</span> draft(s) sélectionné(s)</span>
+        </div>
+        <div class="selection-actions">
+            <button type="button" class="btn-cancel-selection" onclick="clearSelection()">Annuler</button>
+            <button type="button" class="btn-delete-selected" onclick="deleteSelected()">🗑️ Supprimer la sélection</button>
+        </div>
+    </div>
+    
     {% if drafts %}
         <table>
             <thead>
                 <tr>
+                    <th class="checkbox-cell">
+                        <input type="checkbox" class="select-all-checkbox" id="selectAll" onchange="toggleSelectAll()">
+                    </th>
                     <th>Date de création</th>
                     <th>Destinataire</th>
                     <th>Sujet</th>
@@ -26,7 +137,10 @@
             </thead>
             <tbody>
                 {% for draft in drafts %}
-                <tr>
+                <tr id="row-{{ draft.id }}">
+                    <td class="checkbox-cell">
+                        <input type="checkbox" class="draft-checkbox" data-draft-id="{{ draft.id }}" onchange="updateSelection()">
+                    </td>
                     <td>
                         {% if draft.created_at %}
                             {{ draft.created_at.strftime('%d/%m/%Y %H:%M') if draft.created_at is not string else draft.created_at }}
@@ -70,4 +184,125 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+function getSelectedDraftIds() {
+    const checkboxes = document.querySelectorAll('.draft-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.dataset.draftId);
+}
+
+function updateSelection() {
+    const selected = getSelectedDraftIds();
+    const count = selected.length;
+    const selectionBar = document.getElementById('selectionBar');
+    const countSpan = document.getElementById('selectedCount');
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const allCheckboxes = document.querySelectorAll('.draft-checkbox');
+    
+    countSpan.textContent = count;
+    
+    if (count > 0) {
+        selectionBar.classList.add('active');
+    } else {
+        selectionBar.classList.remove('active');
+    }
+    
+    // Mettre à jour le style des lignes sélectionnées
+    allCheckboxes.forEach(cb => {
+        const row = cb.closest('tr');
+        if (cb.checked) {
+            row.classList.add('selected');
+        } else {
+            row.classList.remove('selected');
+        }
+    });
+    
+    // Mettre à jour la checkbox "tout sélectionner"
+    selectAllCheckbox.checked = count === allCheckboxes.length && count > 0;
+    selectAllCheckbox.indeterminate = count > 0 && count < allCheckboxes.length;
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const allCheckboxes = document.querySelectorAll('.draft-checkbox');
+    
+    allCheckboxes.forEach(cb => {
+        cb.checked = selectAllCheckbox.checked;
+    });
+    
+    updateSelection();
+}
+
+function clearSelection() {
+    const allCheckboxes = document.querySelectorAll('.draft-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAll');
+    
+    allCheckboxes.forEach(cb => {
+        cb.checked = false;
+    });
+    selectAllCheckbox.checked = false;
+    
+    updateSelection();
+}
+
+function deleteSelected() {
+    const selectedIds = getSelectedDraftIds();
+    
+    if (selectedIds.length === 0) {
+        alert('Aucun draft sélectionné');
+        return;
+    }
+    
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${selectedIds.length} draft(s) ? Cette action est irréversible.`)) {
+        return;
+    }
+    
+    // Envoyer la requête de suppression
+    fetch('/api/drafts/delete-multiple', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ draft_ids: selectedIds })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Supprimer les lignes du tableau
+            selectedIds.forEach(id => {
+                const row = document.getElementById('row-' + id);
+                if (row) {
+                    row.remove();
+                }
+            });
+            
+            // Mettre à jour le compteur
+            const badge = document.querySelector('[style*="border-radius: 20px"]');
+            const remaining = document.querySelectorAll('.draft-checkbox').length;
+            if (badge) {
+                badge.textContent = remaining + ' draft' + (remaining > 1 ? 's' : '');
+            }
+            
+            clearSelection();
+            
+            // Afficher un message si plus de drafts
+            if (remaining === 0) {
+                location.reload();
+            }
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        alert('Erreur lors de la suppression: ' + error);
+    });
+}
+
+// Raccourci clavier: Echap pour annuler la sélection
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        clearSelection();
+    }
+});
+</script>
 {% endblock %}

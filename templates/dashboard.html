@@ -224,12 +224,21 @@
 <!-- Graphiques -->
 <div class="charts-grid">
     <div class="chart-card">
-        <h3>📈 Activité des 14 derniers jours</h3>
+        <h3>📤 Emails envoyés (14 derniers jours)</h3>
         <div class="chart-container">
-            <canvas id="activityChart"></canvas>
+            <canvas id="sendsChart"></canvas>
         </div>
     </div>
     
+    <div class="chart-card">
+        <h3>👀 Ouvertures & Réponses (14 derniers jours)</h3>
+        <div class="chart-container">
+            <canvas id="engagementChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="charts-grid">
     <div class="chart-card">
         <h3>🎯 Funnel de conversion</h3>
         <div class="funnel-container">
@@ -242,6 +251,13 @@
             <div class="funnel-step replied">
                 💬 Réponses: {{ total_replied }} ({{ "%.0f"|format(reply_rate) }}%)
             </div>
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <h3>📊 Taux de performance</h3>
+        <div class="chart-container">
+            <canvas id="ratesChart"></canvas>
         </div>
     </div>
 </div>
@@ -277,22 +293,50 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    const ctx = document.getElementById('activityChart').getContext('2d');
     const chartData = JSON.parse('{{ chart_data|tojson|safe }}');
     
-    new Chart(ctx, {
-        type: 'line',
+    // Graphique des envois
+    const sendsCtx = document.getElementById('sendsChart').getContext('2d');
+    new Chart(sendsCtx, {
+        type: 'bar',
         data: {
             labels: chartData.labels,
             datasets: [
                 {
-                    label: 'Envoyés',
+                    label: 'Emails envoyés',
                     data: chartData.sends,
+                    backgroundColor: 'rgba(52, 152, 219, 0.7)',
                     borderColor: '#3498db',
-                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                    fill: true,
-                    tension: 0.3
-                },
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+    
+    // Graphique engagement (ouvertures + réponses)
+    const engagementCtx = document.getElementById('engagementChart').getContext('2d');
+    new Chart(engagementCtx, {
+        type: 'line',
+        data: {
+            labels: chartData.labels,
+            datasets: [
                 {
                     label: 'Ouverts',
                     data: chartData.opens,
@@ -324,6 +368,45 @@
                     beginAtZero: true,
                     ticks: {
                         stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+    
+    // Graphique des taux
+    const ratesCtx = document.getElementById('ratesChart').getContext('2d');
+    new Chart(ratesCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Taux d\'ouverture', 'Taux de réponse', 'Taux de bounce'],
+            datasets: [{
+                data: [{{ open_rate }}, {{ reply_rate }}, {{ bounce_rate }}],
+                backgroundColor: [
+                    'rgba(243, 156, 18, 0.8)',
+                    'rgba(39, 174, 96, 0.8)',
+                    'rgba(231, 76, 60, 0.8)'
+                ],
+                borderColor: [
+                    '#f39c12',
+                    '#27ae60',
+                    '#e74c3c'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.parsed.toFixed(1) + '%';
+                        }
                     }
                 }
             }
