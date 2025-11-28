@@ -175,10 +175,111 @@
         background: #bdc3c7;
         cursor: not-allowed;
     }
+    
+    /* Styles pour les générations en cours */
+    .pending-card {
+        background: linear-gradient(135deg, #fff3cd 0%, #fefaed 100%);
+        border: 1px solid #ffc107;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .pending-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .pending-title {
+        color: #856404;
+        margin: 0;
+        font-size: 18px;
+    }
+    
+    .pending-badge {
+        background-color: #ffc107;
+        color: #212529;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .pending-list {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .pending-item {
+        background: white;
+        border-radius: 8px;
+        padding: 10px 15px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+    }
+    
+    .pending-item-info {
+        flex: 1;
+    }
+    
+    .pending-item-time {
+        color: #856404;
+        font-size: 12px;
+        margin-top: 4px;
+    }
+    
+    .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #ffc107;
+        border-radius: 50%;
+        border-top-color: transparent;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Section des générations en cours -->
+{% if pending_generations and pending_generations|length > 0 %}
+<div class="pending-card">
+    <div class="pending-header">
+        <h3 class="pending-title">⏳ Générations en cours</h3>
+        <span class="pending-badge">{{ pending_generations|length }} en cours</span>
+    </div>
+    
+    <div class="pending-list">
+        {% for gen in pending_generations %}
+        <div class="pending-item">
+            <div class="pending-item-info">
+                <strong>{{ (gen.metadata or {}).get('partner_name') or gen.x_external_id or 'Inconnu' }}</strong>
+                {% if (gen.metadata or {}).get('contact_name') %} - {{ gen.metadata.contact_name }}{% endif %}
+                <div class="pending-item-time">
+                    Démarré 
+                    {% if gen.started_at %}
+                        {{ gen.started_at.strftime('%H:%M:%S') if gen.started_at.strftime is defined else gen.started_at }}
+                    {% else %}
+                        récemment
+                    {% endif %}
+                </div>
+            </div>
+            <div class="spinner"></div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Section des générations échouées -->
 {% if error_drafts and error_drafts|length > 0 %}
 <div class="error-card">

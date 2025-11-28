@@ -148,6 +148,79 @@
     .email-row.hidden {
         display: none;
     }
+    
+    /* Styles pour le filtre de date */
+    .date-filter-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .date-filter-label {
+        font-weight: 500;
+        color: #555;
+    }
+    
+    .date-filter-buttons {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    
+    .date-filter-btn {
+        padding: 8px 16px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s;
+    }
+    
+    .date-filter-btn:hover {
+        background: #f8f9fa;
+        border-color: #3498db;
+    }
+    
+    .date-filter-btn.active {
+        background: #3498db;
+        color: white;
+        border-color: #3498db;
+    }
+    
+    .date-picker-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .date-picker-input {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+    
+    .date-picker-input:focus {
+        outline: none;
+        border-color: #3498db;
+    }
+    
+    .btn-apply-date {
+        padding: 8px 16px;
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    
+    .btn-apply-date:hover {
+        background: #2980b9;
+    }
 </style>
 {% endblock %}
 
@@ -182,6 +255,22 @@
 
 <div class="card">
     <h2 style="margin-bottom: 20px;">✅ Emails envoyés</h2>
+    
+    <!-- Filtre par date -->
+    <div class="date-filter-container">
+        <span class="date-filter-label">📅 Période :</span>
+        <div class="date-filter-buttons">
+            <a href="{{ url_for('history.history_list') }}" class="date-filter-btn {{ 'active' if date_filter == 'all' else '' }}">Tous</a>
+            <a href="{{ url_for('history.history_list', date='today') }}" class="date-filter-btn {{ 'active' if date_filter == 'today' else '' }}">Aujourd'hui</a>
+            <a href="{{ url_for('history.history_list', date='yesterday') }}" class="date-filter-btn {{ 'active' if date_filter == 'yesterday' else '' }}">Hier</a>
+            <a href="{{ url_for('history.history_list', date='week') }}" class="date-filter-btn {{ 'active' if date_filter == 'week' else '' }}">7 derniers jours</a>
+            <a href="{{ url_for('history.history_list', date='month') }}" class="date-filter-btn {{ 'active' if date_filter == 'month' else '' }}">30 derniers jours</a>
+        </div>
+        <div class="date-picker-container">
+            <input type="date" id="customDatePicker" class="date-picker-input" value="{{ custom_date }}">
+            <button type="button" class="btn-apply-date" onclick="applyCustomDate()">Voir</button>
+        </div>
+    </div>
     
     <!-- Onglets de filtrage -->
     <div class="tabs-container">

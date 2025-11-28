@@ -241,6 +241,38 @@
     .status-scheduled { background-color: #fff3cd; color: #856404; }
     .status-sent { background-color: #d4edda; color: #155724; }
     .status-cancelled { background-color: #f8d7da; color: #721c24; }
+    .status-error { background-color: #f8d7da; color: #721c24; }
+    
+    .btn-cancel-followup {
+        background-color: #e74c3c;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .btn-cancel-followup:hover {
+        background-color: #c0392b;
+    }
+    
+    .btn-cancel-all {
+        background-color: #c0392b;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-weight: 600;
+    }
+    
+    .btn-cancel-all:hover {
+        background-color: #a93226;
+    }
     
     .section {
         margin-bottom: 30px;
@@ -474,7 +506,18 @@
             <!-- Relances détaillées -->
             {% if followups %}
             <div class="section">
-                <h3>🔄 Détails des relances</h3>
+                <h3 style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>🔄 Détails des relances</span>
+                    {% set scheduled_followups = followups|selectattr('status', 'equalto', 'scheduled')|list %}
+                    {% if scheduled_followups|length > 1 %}
+                    <form method="POST" action="{{ url_for('followups.cancel_all_followups', draft_id=draft.id) }}" style="margin: 0;">
+                        <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
+                        <button type="submit" class="btn-cancel-all" onclick="return confirm('Êtes-vous sûr de vouloir annuler TOUTES les relances planifiées ({{ scheduled_followups|length }}) ?')">
+                            ✗ Tout annuler
+                        </button>
+                    </form>
+                    {% endif %}
+                </h3>
                 <ul class="followup-list">
                     {% for followup in followups %}
                     <li class="followup-item">
@@ -484,13 +527,29 @@
                             <small style="color: #7f8c8d;">
                                 Prévue pour: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
                             </small>
+                            {% if followup.status == 'cancelled' and followup.cancelled_at %}
+                            <br>
+                            <small style="color: #95a5a6;">
+                                Annulée le: {{ followup.cancelled_at.strftime('%d/%m/%Y %H:%M') if followup.cancelled_at is not string else followup.cancelled_at }}
+                            </small>
+                            {% endif %}
                         </div>
-                        <span class="status status-{{ followup.status }}">
-                            {% if followup.status == 'scheduled' %}⏱ Planifiée
-                            {% elif followup.status == 'sent' %}✓ Envoyée
-                            {% elif followup.status == 'cancelled' %}✗ Annulée
-                            {% else %}{{ followup.status }}{% endif %}
-                        </span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="status status-{{ followup.status }}">
+                                {% if followup.status == 'scheduled' %}⏱ Planifiée
+                                {% elif followup.status == 'sent' %}✓ Envoyée
+                                {% elif followup.status == 'cancelled' %}✗ Annulée
+                                {% else %}{{ followup.status }}{% endif %}
+                            </span>
+                            {% if followup.status == 'scheduled' %}
+                            <form method="POST" action="{{ url_for('followups.cancel_followup', followup_id=followup.id) }}" style="margin: 0;">
+                                <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
+                                <button type="submit" class="btn-cancel-followup" onclick="return confirm('Êtes-vous sûr de vouloir annuler cette relance ?')">
+                                    ✗ Annuler
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </li>
                     {% endfor %}
                 </ul>

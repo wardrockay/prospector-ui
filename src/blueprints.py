@@ -27,6 +27,7 @@ MARKDOWN_EXTENSIONS = ["nl2br", "tables", "fenced_code", "sane_lists"]
 DRAFT_COLLECTION = os.environ.get("DRAFT_COLLECTION", "email_drafts")
 FOLLOWUP_COLLECTION = os.environ.get("FOLLOWUP_COLLECTION", "email_followups")
 PIXEL_COLLECTION = os.environ.get("PIXEL_COLLECTION", "email_opens")
+GENERATION_COLLECTION = os.environ.get("GENERATION_COLLECTION", "mail_writer_operations")
 SEND_MAIL_SERVICE_URL = os.environ.get("SEND_MAIL_SERVICE_URL", "").rstrip("/")
 AUTO_FOLLOWUP_URL = os.environ.get("AUTO_FOLLOWUP_URL", "").rstrip("/")
 ODOO_DB_URL = os.environ.get("ODOO_DB_URL", "").rstrip("/")
@@ -126,11 +127,38 @@ def index():
             draft_data["id"] = doc.id
             error_drafts.append(draft_data)
         
-        return render_template("index.html", drafts=drafts, error_drafts=error_drafts)
+        # Récupérer les générations en cours (statut pending dans mail_writer_operations)
+        pending_generations = []
+        try:
+            # Essayer d'abord avec order_by, sinon sans (index peut manquer)
+            try:
+                generations_ref = db.collection(GENERATION_COLLECTION).where("status", "==", "pending").order_by("started_at", direction=firestore.Query.DESCENDING)
+                for doc in generations_ref.stream():
+                    gen_data = doc.to_dict()
+                    gen_data["id"] = doc.id
+                    # S'assurer que metadata existe
+                    if "metadata" not in gen_data:
+                        gen_data["metadata"] = {}
+                    pending_generations.append(gen_data)
+            except Exception:
+                # Fallback sans order_by
+                generations_ref = db.collection(GENERATION_COLLECTION).where("status", "==", "pending")
+                for doc in generations_ref.stream():
+                    gen_data = doc.to_dict()
+                    gen_data["id"] = doc.id
+                    if "metadata" not in gen_data:
+                        gen_data["metadata"] = {}
+                    pending_generations.append(gen_data)
+                # Trier manuellement
+                pending_generations.sort(key=lambda x: x.get("started_at", datetime.min), reverse=True)
+        except Exception as gen_error:
+            print(f"[WARNING] Impossible de récupérer les générations en cours: {gen_error}")
+        
+        return render_template("index.html", drafts=drafts, error_drafts=error_drafts, pending_generations=pending_generations)
     
     except Exception as e:
         flash(f"Erreur lors de la récupération des drafts: {str(e)}", "error")
-        return render_template("index.html", drafts=[], error_drafts=[])
+        return render_template("index.html", drafts=[], error_drafts=[], pending_generations=[])
 
 
 @main_bp.route("/draft/<draft_id>")
@@ -513,7 +541,8 @@ def regenerate_draft(draft_id: str):
             "description": lead.get("description", ""),
             "x_external_id": x_external_id,
             "version_group_id": version_group_id,
-            "odoo_id": odoo_id
+            "odoo_id": odoo_id,
+            "regenerate_id": str(uuid.uuid4())  # Force new generation
         }
         
         mail_writer_response = http_requests.post(MAIL_WRITER_URL, json=mail_writer_payload, timeout=60)
@@ -715,7 +744,8 @@ def retry_failed_generations():
                     "function": lead.get("function", ""),
                     "description": lead.get("description", ""),
                     "x_external_id": x_external_id,
-                    "odoo_id": odoo_id
+                    "odoo_id": odoo_id,
+                    "regenerate_id": str(uuid.uuid4())  # Force new generation
                 }
                 
                 mail_writer_response = http_requests.post(MAIL_WRITER_URL, json=mail_writer_payload, timeout=60)
@@ -799,7 +829,51 @@ def fetch_thread_messages_from_gmail(draft_id: str) -> dict:
 def history_list():
     """Show sent email history."""
     try:
-        sent_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "sent").order_by("sent_at", direction=firestore.Query.DESCENDING).limit(50)
+        from datetime import timedelta
+        
+        # Récupérer le filtre de date
+        date_filter = request.args.get("date", "all")
+        custom_date = request.args.get("custom_date", "")
+        
+        # Calculer les dates de début et fin selon le filtre
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        date_start = None
+        date_end = None
+        
+        if date_filter == "today":
+            date_start = today
+            date_end = today + timedelta(days=1)
+        elif date_filter == "yesterday":
+            date_start = today - timedelta(days=1)
+            date_end = today
+        elif date_filter == "week":
+            date_start = today - timedelta(days=7)
+            date_end = today + timedelta(days=1)
+        elif date_filter == "month":
+            date_start = today - timedelta(days=30)
+            date_end = today + timedelta(days=1)
+        elif date_filter == "custom" and custom_date:
+            try:
+                date_start = datetime.strptime(custom_date, "%Y-%m-%d")
+                date_end = date_start + timedelta(days=1)
+            except ValueError:
+                date_start = None
+                date_end = None
+        
+        # Construire la requête
+        if date_start and date_end:
+            # Requête avec filtres de date
+            sent_drafts_ref = (
+                db.collection(DRAFT_COLLECTION)
+                .where("status", "==", "sent")
+                .where("sent_at", ">=", date_start)
+                .where("sent_at", "<", date_end)
+                .order_by("sent_at", direction=firestore.Query.DESCENDING)
+                .limit(200)
+            )
+        else:
+            sent_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "sent").order_by("sent_at", direction=firestore.Query.DESCENDING).limit(50)
+        
         sent_drafts = []
         
         total_sent = 0
@@ -862,11 +936,11 @@ def history_list():
             draft_data["id"] = doc.id
             rejected_drafts.append(draft_data)
         
-        return render_template("history.html", sent_drafts=sent_drafts, rejected_drafts=rejected_drafts, stats=stats)
+        return render_template("history.html", sent_drafts=sent_drafts, rejected_drafts=rejected_drafts, stats=stats, date_filter=date_filter, custom_date=custom_date)
     
     except Exception as e:
         flash(f"Erreur lors de la récupération de l'historique: {str(e)}", "error")
-        return render_template("history.html", sent_drafts=[], rejected_drafts=[], stats={})
+        return render_template("history.html", sent_drafts=[], rejected_drafts=[], stats={}, date_filter="all", custom_date="")
 
 
 @history_bp.route("/draft/<draft_id>")
@@ -1357,18 +1431,21 @@ def timeline():
 def cancel_followup(followup_id: str):
     """Cancel a scheduled followup."""
     try:
+        # Récupérer l'URL de redirection (depuis le formulaire ou par défaut timeline)
+        next_url = request.form.get("next") or url_for("followups.timeline")
+        
         doc_ref = db.collection(FOLLOWUP_COLLECTION).document(followup_id)
         doc = doc_ref.get()
         
         if not doc.exists:
             flash("Relance non trouvée", "error")
-            return redirect(url_for("followups.timeline"))
+            return redirect(next_url)
         
         followup_data = doc.to_dict()
         
         if followup_data.get("status") != "scheduled":
             flash("Cette relance ne peut pas être annulée", "warning")
-            return redirect(url_for("followups.timeline"))
+            return redirect(next_url)
         
         doc_ref.update({
             "status": "cancelled",
@@ -1377,8 +1454,39 @@ def cancel_followup(followup_id: str):
         })
         
         flash("Relance annulée avec succès", "success")
-        return redirect(url_for("followups.timeline"))
+        return redirect(next_url)
     
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
-        return redirect(url_for("followups.timeline"))
+        return redirect(request.form.get("next") or url_for("followups.timeline"))
+
+
+@followups_bp.route("/cancel-all/<draft_id>", methods=["POST"])
+def cancel_all_followups(draft_id: str):
+    """Cancel all scheduled followups for a draft."""
+    try:
+        # Récupérer l'URL de redirection
+        next_url = request.form.get("next") or url_for("history.sent_draft_detail", draft_id=draft_id)
+        
+        # Récupérer toutes les relances planifiées pour ce draft
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", draft_id).where("status", "==", "scheduled")
+        
+        cancelled_count = 0
+        for followup_doc in followups_ref.stream():
+            followup_doc.reference.update({
+                "status": "cancelled",
+                "cancelled_at": datetime.utcnow(),
+                "cancelled_reason": "Annulée manuellement (toutes)"
+            })
+            cancelled_count += 1
+        
+        if cancelled_count > 0:
+            flash(f"{cancelled_count} relance(s) annulée(s) avec succès", "success")
+        else:
+            flash("Aucune relance planifiée à annuler", "info")
+        
+        return redirect(next_url)
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(request.form.get("next") or url_for("history.sent_draft_detail", draft_id=draft_id))
