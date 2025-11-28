@@ -440,7 +440,18 @@
     </div>
 </div>
 
+<!-- Données pour JavaScript -->
+<script id="draftData" type="application/json">
+{
+    "subject": {{ draft.subject|tojson }},
+    "body": {{ draft.body|tojson }}
+}
+</script>
+
 <script>
+    // Charger les données du draft
+    const draftData = JSON.parse(document.getElementById('draftData').textContent);
+
     function showConfirm() {
         document.getElementById('confirmSend').classList.add('show');
         document.getElementById('testMail').classList.remove('show');
@@ -516,9 +527,7 @@
     
     // Copier le contenu du mail
     function copyMailContent() {
-        const subject = '{{ draft.subject|replace("'", "\\'") }}';
-        const body = `{{ draft.body|replace("\\n", "\\\\n")|replace("'", "\\'") }}`;
-        const fullContent = `Sujet: ${subject}\n\n${body}`;
+        const fullContent = `Sujet: ${draftData.subject}\n\n${draftData.body}`;
         
         navigator.clipboard.writeText(fullContent).then(() => {
             const btn = document.getElementById('copyBtn');

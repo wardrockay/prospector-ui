@@ -96,10 +96,114 @@
     tr:hover {
         background-color: #f8f9fa;
     }
+    
+    /* Styles pour les erreurs */
+    .error-card {
+        background: linear-gradient(135deg, #fee8e7 0%, #fef2f2 100%);
+        border: 1px solid #f5c6cb;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .error-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .error-title {
+        color: #721c24;
+        margin: 0;
+        font-size: 18px;
+    }
+    
+    .error-badge {
+        background-color: #e74c3c;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .error-list {
+        max-height: 200px;
+        overflow-y: auto;
+        margin-bottom: 15px;
+    }
+    
+    .error-item {
+        background: white;
+        border-radius: 8px;
+        padding: 10px 15px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+    }
+    
+    .error-item-info {
+        flex: 1;
+    }
+    
+    .error-item-message {
+        color: #721c24;
+        font-size: 12px;
+        margin-top: 4px;
+    }
+    
+    .btn-retry-all {
+        background: #e74c3c;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+    
+    .btn-retry-all:hover {
+        background: #c0392b;
+    }
+    
+    .btn-retry-all:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Section des générations échouées -->
+{% if error_drafts and error_drafts|length > 0 %}
+<div class="error-card">
+    <div class="error-header">
+        <h3 class="error-title">⚠️ Générations échouées</h3>
+        <span class="error-badge">{{ error_drafts|length }} erreur{{ 's' if error_drafts|length > 1 else '' }}</span>
+    </div>
+    
+    <div class="error-list">
+        {% for draft in error_drafts %}
+        <div class="error-item">
+            <div class="error-item-info">
+                <strong>{{ draft.partner_name or draft.to or 'Inconnu' }}</strong> - {{ draft.contact_name or '' }}
+                <div class="error-item-message">{{ draft.error_message or 'Erreur inconnue' }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <button type="button" class="btn-retry-all" id="retryAllBtn" onclick="retryAllFailed()">
+        🔄 Relancer toutes les générations ({{ error_drafts|length }})
+    </button>
+</div>
+{% endif %}
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2 style="margin: 0;">📬 Drafts en attente de review</h2>
@@ -304,5 +408,45 @@ document.addEventListener('keydown', function(e) {
         clearSelection();
     }
 });
+
+// Relancer toutes les générations échouées
+function retryAllFailed() {
+    const btn = document.getElementById('retryAllBtn');
+    const originalText = btn.innerHTML;
+    
+    if (!confirm('Voulez-vous relancer toutes les générations échouées ?')) {
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Relance en cours...';
+    
+    fetch('/api/retry-failed-generations', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let message = `✓ ${data.retried} génération(s) relancée(s)`;
+            if (data.failed > 0) {
+                message += `\n⚠️ ${data.failed} échec(s)`;
+            }
+            alert(message);
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        alert('Erreur lors de la relance: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
 </script>
 {% endblock %}

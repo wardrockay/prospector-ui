@@ -8,6 +8,7 @@ Modular Flask blueprints for route organization.
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import datetime
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
@@ -117,11 +118,19 @@ def index():
         
         drafts.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
         
-        return render_template("index.html", drafts=drafts)
+        # Récupérer aussi les drafts en erreur
+        error_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "error").order_by("created_at", direction=firestore.Query.DESCENDING)
+        error_drafts = []
+        for doc in error_drafts_ref.stream():
+            draft_data = doc.to_dict()
+            draft_data["id"] = doc.id
+            error_drafts.append(draft_data)
+        
+        return render_template("index.html", drafts=drafts, error_drafts=error_drafts)
     
     except Exception as e:
         flash(f"Erreur lors de la récupération des drafts: {str(e)}", "error")
-        return render_template("index.html", drafts=[])
+        return render_template("index.html", drafts=[], error_drafts=[])
 
 
 @main_bp.route("/draft/<draft_id>")
@@ -427,8 +436,9 @@ def edit_draft(draft_id: str):
         if "contact_info" in original_data:
             new_draft_data["contact_info"] = original_data["contact_info"]
         
-        new_draft_ref = db.collection(DRAFT_COLLECTION).add(new_draft_data)
-        new_draft_id = new_draft_ref[1].id
+        # Générer un UUID pour le nouveau draft
+        new_draft_id = str(uuid.uuid4())
+        db.collection(DRAFT_COLLECTION).document(new_draft_id).set(new_draft_data)
         
         flash("Nouvelle version du draft créée avec vos modifications", "success")
         return redirect(url_for("main.draft_detail", draft_id=new_draft_id))
@@ -625,6 +635,104 @@ def delete_multiple_drafts():
         return jsonify({
             "success": True,
             "deleted_count": deleted_count,
+            "errors": errors if errors else None
+        })
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/retry-failed-generations", methods=["POST"])
+def retry_failed_generations():
+    """Retry all failed draft generations by calling mail-writer again."""
+    try:
+        if not MAIL_WRITER_URL:
+            return jsonify({"success": False, "error": "MAIL_WRITER_URL non configuré"}), 500
+        
+        if not ODOO_DB_URL or not ODOO_SECRET:
+            return jsonify({"success": False, "error": "Configuration Odoo manquante"}), 500
+        
+        # Récupérer tous les drafts en erreur
+        error_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "error")
+        error_drafts = list(error_drafts_ref.stream())
+        
+        if not error_drafts:
+            return jsonify({"success": True, "message": "Aucun draft en erreur", "retried": 0, "failed": 0})
+        
+        retried = 0
+        failed = 0
+        errors = []
+        
+        for doc in error_drafts:
+            draft_data = doc.to_dict()
+            draft_id = doc.id
+            x_external_id = draft_data.get("x_external_id", "")
+            
+            if not x_external_id:
+                # Si pas d'external_id, on ne peut pas récupérer les données Odoo
+                errors.append(f"Draft {draft_id}: pas de x_external_id")
+                failed += 1
+                continue
+            
+            try:
+                # Récupérer les données depuis Odoo
+                odoo_url = f"{ODOO_DB_URL}/json/2/crm.lead/search_read"
+                odoo_payload = {
+                    "domain": [["x_external_id", "ilike", x_external_id]],
+                    "fields": [
+                        "id", "email_normalized", "website", "contact_name",
+                        "partner_name", "function", "description"
+                    ]
+                }
+                odoo_headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {ODOO_SECRET}"
+                }
+                
+                odoo_response = http_requests.post(odoo_url, json=odoo_payload, headers=odoo_headers, timeout=15)
+                odoo_response.raise_for_status()
+                odoo_data = odoo_response.json()
+                
+                if not odoo_data or len(odoo_data) == 0:
+                    errors.append(f"Draft {draft_id}: lead non trouvé dans Odoo")
+                    failed += 1
+                    continue
+                
+                lead = odoo_data[0]
+                odoo_id = lead.get("id")
+                contact_name = lead.get("contact_name", "")
+                name_parts = contact_name.split(" ", 1) if contact_name else ["", ""]
+                first_name = name_parts[0] if len(name_parts) > 0 else ""
+                last_name = name_parts[1] if len(name_parts) > 1 else ""
+                
+                # Appeler mail-writer pour régénérer
+                mail_writer_payload = {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": lead.get("email_normalized", ""),
+                    "website": lead.get("website", ""),
+                    "partner_name": lead.get("partner_name", ""),
+                    "function": lead.get("function", ""),
+                    "description": lead.get("description", ""),
+                    "x_external_id": x_external_id,
+                    "odoo_id": odoo_id
+                }
+                
+                mail_writer_response = http_requests.post(MAIL_WRITER_URL, json=mail_writer_payload, timeout=60)
+                mail_writer_response.raise_for_status()
+                
+                # Supprimer l'ancien draft en erreur
+                doc.reference.delete()
+                retried += 1
+                
+            except Exception as e:
+                errors.append(f"Draft {draft_id}: {str(e)}")
+                failed += 1
+        
+        return jsonify({
+            "success": True,
+            "retried": retried,
+            "failed": failed,
             "errors": errors if errors else None
         })
     
@@ -1185,7 +1293,7 @@ def timeline():
     """Show followups timeline view."""
     try:
         # Récupérer tous les followups triés par date planifiée (plus proche en premier)
-        followups_ref = db.collection(FOLLOWUP_COLLECTION).order_by("scheduled_for", direction=firestore.Query.DESCENDING).limit(200)
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(200)
         
         followups = []
         draft_cache = {}
@@ -1209,7 +1317,7 @@ def timeline():
             
             followups.append(followup_data)
         
-        # Statistiques
+        # Statistiques par statut
         stats = {
             "total": len(followups),
             "scheduled": len([f for f in followups if f.get("status") == "scheduled"]),
@@ -1217,12 +1325,28 @@ def timeline():
             "cancelled": len([f for f in followups if f.get("status") == "cancelled"])
         }
         
+        # Statistiques par jours (J+3, J+7, J+10, J+180)
+        days_stats = {
+            3: len([f for f in followups if f.get("days_after_initial") == 3]),
+            7: len([f for f in followups if f.get("days_after_initial") == 7]),
+            10: len([f for f in followups if f.get("days_after_initial") == 10]),
+            180: len([f for f in followups if f.get("days_after_initial") == 180])
+        }
+        
         # Filtrer par statut si demandé
         filter_status = request.args.get("status", "all")
         if filter_status != "all":
             followups = [f for f in followups if f.get("status") == filter_status]
         
-        return render_template("followups_timeline.html", followups=followups, stats=stats, current_filter=filter_status)
+        # Filtrer par jours si demandé
+        filter_days = request.args.get("days")
+        if filter_days and filter_days.isdigit():
+            filter_days = int(filter_days)
+            followups = [f for f in followups if f.get("days_after_initial") == filter_days]
+        else:
+            filter_days = None
+        
+        return render_template("followups_timeline.html", followups=followups, stats=stats, days_stats=days_stats, current_filter=filter_status, current_days=filter_days)
     
     except Exception as e:
         flash(f"Erreur lors du chargement des relances: {str(e)}", "error")

@@ -353,6 +353,16 @@
         font-weight: 600;
     }
     
+    /* Tabs J+X */
+    .filter-tab.j3 { background: #f3e8ff; color: #9b59b6; }
+    .filter-tab.j3.active { background: #9b59b6; color: white; }
+    .filter-tab.j7 { background: #e8f4fc; color: #3498db; }
+    .filter-tab.j7.active { background: #3498db; color: white; }
+    .filter-tab.j10 { background: #fef3e8; color: #e67e22; }
+    .filter-tab.j10.active { background: #e67e22; color: white; }
+    .filter-tab.j180 { background: #fee8e7; color: #e74c3c; }
+    .filter-tab.j180.active { background: #e74c3c; color: white; }
+    
     /* Countdown */
     .countdown {
         font-size: 12px;
@@ -390,17 +400,33 @@
 </div>
 
 <div class="filter-tabs">
-    <a href="{{ url_for('followups.timeline') }}" class="filter-tab {% if current_filter == 'all' %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline') }}" class="filter-tab {% if current_filter == 'all' and not current_days %}active{% endif %}">
         Tout <span class="count">{{ stats.total }}</span>
     </a>
-    <a href="{{ url_for('followups.timeline', status='scheduled') }}" class="filter-tab {% if current_filter == 'scheduled' %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline', status='scheduled') }}" class="filter-tab {% if current_filter == 'scheduled' and not current_days %}active{% endif %}">
         ⏱ Planifiées <span class="count">{{ stats.scheduled }}</span>
     </a>
-    <a href="{{ url_for('followups.timeline', status='sent') }}" class="filter-tab {% if current_filter == 'sent' %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline', status='sent') }}" class="filter-tab {% if current_filter == 'sent' and not current_days %}active{% endif %}">
         ✓ Envoyées <span class="count">{{ stats.sent }}</span>
     </a>
-    <a href="{{ url_for('followups.timeline', status='cancelled') }}" class="filter-tab {% if current_filter == 'cancelled' %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline', status='cancelled') }}" class="filter-tab {% if current_filter == 'cancelled' and not current_days %}active{% endif %}">
         ✗ Annulées <span class="count">{{ stats.cancelled }}</span>
+    </a>
+</div>
+
+<!-- Filtres par type de relance J+X -->
+<div class="filter-tabs" style="margin-top: -15px;">
+    <a href="{{ url_for('followups.timeline', days=3) }}" class="filter-tab j3 {% if current_days == 3 %}active{% endif %}">
+        J+3 <span class="count">{{ days_stats[3] }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', days=7) }}" class="filter-tab j7 {% if current_days == 7 %}active{% endif %}">
+        J+7 <span class="count">{{ days_stats[7] }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', days=10) }}" class="filter-tab j10 {% if current_days == 10 %}active{% endif %}">
+        J+10 <span class="count">{{ days_stats[10] }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', days=180) }}" class="filter-tab j180 {% if current_days == 180 %}active{% endif %}">
+        J+180 <span class="count">{{ days_stats[180] }}</span>
     </a>
 </div>
 
