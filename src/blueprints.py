@@ -1372,6 +1372,9 @@ def timeline():
         followups = []
         draft_cache = {}
         
+        # Date d'aujourd'hui pour le filtre
+        today = datetime.utcnow().date()
+        
         for doc in followups_ref.stream():
             followup_data = doc.to_dict()
             followup_data["id"] = doc.id
@@ -1407,6 +1410,18 @@ def timeline():
             180: len([f for f in followups if f.get("days_after_initial") == 180])
         }
         
+        # Compter les relances prévues aujourd'hui (scheduled uniquement)
+        def is_today(f):
+            scheduled_for = f.get("scheduled_for")
+            if scheduled_for and f.get("status") == "scheduled":
+                if hasattr(scheduled_for, 'date'):
+                    return scheduled_for.date() == today
+                elif isinstance(scheduled_for, str):
+                    return scheduled_for[:10] == today.isoformat()
+            return False
+        
+        today_count = len([f for f in followups if is_today(f)])
+        
         # Filtrer par statut si demandé
         filter_status = request.args.get("status", "all")
         if filter_status != "all":
@@ -1420,7 +1435,12 @@ def timeline():
         else:
             filter_days = None
         
-        return render_template("followups_timeline.html", followups=followups, stats=stats, days_stats=days_stats, current_filter=filter_status, current_days=filter_days)
+        # Filtrer pour aujourd'hui si demandé
+        filter_today = request.args.get("today") == "1"
+        if filter_today:
+            followups = [f for f in followups if is_today(f)]
+        
+        return render_template("followups_timeline.html", followups=followups, stats=stats, days_stats=days_stats, current_filter=filter_status, current_days=filter_days, today_count=today_count, filter_today=filter_today)
     
     except Exception as e:
         flash(f"Erreur lors du chargement des relances: {str(e)}", "error")

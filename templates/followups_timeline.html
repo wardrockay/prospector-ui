@@ -363,6 +363,12 @@
     .filter-tab.j180 { background: #fee8e7; color: #e74c3c; }
     .filter-tab.j180.active { background: #e74c3c; color: white; }
     
+    /* Tab Aujourd'hui */
+    .filter-tab.today { background: #e8f8f5; color: #1abc9c; font-weight: 600; }
+    .filter-tab.today.active { background: #1abc9c; color: white; }
+    .filter-tab.today .count { background: rgba(26, 188, 156, 0.2); }
+    .filter-tab.today.active .count { background: rgba(255, 255, 255, 0.3); }
+    
     /* Countdown */
     .countdown {
         font-size: 12px;
@@ -400,16 +406,19 @@
 </div>
 
 <div class="filter-tabs">
-    <a href="{{ url_for('followups.timeline') }}" class="filter-tab {% if current_filter == 'all' and not current_days %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline') }}" class="filter-tab {% if current_filter == 'all' and not current_days and not filter_today %}active{% endif %}">
         Tout <span class="count">{{ stats.total }}</span>
     </a>
-    <a href="{{ url_for('followups.timeline', status='scheduled') }}" class="filter-tab {% if current_filter == 'scheduled' and not current_days %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline', today=1) }}" class="filter-tab today {% if filter_today %}active{% endif %}">
+        📅 Aujourd'hui <span class="count">{{ today_count }}</span>
+    </a>
+    <a href="{{ url_for('followups.timeline', status='scheduled') }}" class="filter-tab {% if current_filter == 'scheduled' and not current_days and not filter_today %}active{% endif %}">
         ⏱ Planifiées <span class="count">{{ stats.scheduled }}</span>
     </a>
-    <a href="{{ url_for('followups.timeline', status='sent') }}" class="filter-tab {% if current_filter == 'sent' and not current_days %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline', status='sent') }}" class="filter-tab {% if current_filter == 'sent' and not current_days and not filter_today %}active{% endif %}">
         ✓ Envoyées <span class="count">{{ stats.sent }}</span>
     </a>
-    <a href="{{ url_for('followups.timeline', status='cancelled') }}" class="filter-tab {% if current_filter == 'cancelled' and not current_days %}active{% endif %}">
+    <a href="{{ url_for('followups.timeline', status='cancelled') }}" class="filter-tab {% if current_filter == 'cancelled' and not current_days and not filter_today %}active{% endif %}">
         ✗ Annulées <span class="count">{{ stats.cancelled }}</span>
     </a>
 </div>
