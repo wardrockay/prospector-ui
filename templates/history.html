@@ -221,6 +221,49 @@
     .btn-apply-date:hover {
         background: #2980b9;
     }
+    
+    .search-container {
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .search-input {
+        flex: 1;
+        padding: 10px 15px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        max-width: 400px;
+    }
+    
+    .search-input:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    }
+    
+    .search-clear-btn {
+        padding: 10px 16px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #7f8c8d;
+    }
+    
+    .search-clear-btn:hover {
+        background: #f8f9fa;
+        border-color: #95a5a6;
+    }
+    
+    .search-results-info {
+        font-size: 13px;
+        color: #7f8c8d;
+        margin-left: auto;
+    }
 </style>
 {% endblock %}
 
@@ -255,6 +298,19 @@
 
 <div class="card">
     <h2 style="margin-bottom: 20px;">✅ Emails envoyés</h2>
+    
+    <!-- Barre de recherche -->
+    <div class="search-container">
+        <input 
+            type="text" 
+            id="emailSearchInput" 
+            class="search-input" 
+            placeholder="🔍 Rechercher par email (destinataire)..."
+            oninput="searchEmails()"
+        >
+        <button class="search-clear-btn" onclick="clearSearch()">✕ Effacer</button>
+        <span class="search-results-info" id="searchResultsInfo"></span>
+    </div>
     
     <!-- Filtre par date -->
     <div class="date-filter-container">
@@ -440,35 +496,96 @@
 <script>
 // Compter et initialiser les onglets
 document.addEventListener('DOMContentLoaded', function() {
-    const rows = document.querySelectorAll('.email-row');
-    let countBounced = 0, countReplied = 0, countRead = 0, countUnread = 0;
+    updateTabCounts();
+});
+
+function updateTabCounts() {
+    const rows = document.querySelectorAll('.email-row:not(.search-hidden)');
+    let countBounced = 0, countReplied = 0, countRead = 0, countUnread = 0, countAll = 0;
     
     rows.forEach(row => {
+        if (row.classList.contains('hidden')) return; // Skip filtered rows
+        
         const isBounced = row.dataset.bounced === 'true';
         const isReplied = row.dataset.replied === 'true';
         const isRead = row.dataset.read === 'true';
         
+        countAll++;
         if (isBounced) countBounced++;
         if (isReplied) countReplied++;
         if (isRead && !isBounced) countRead++;
         if (!isRead && !isBounced) countUnread++;
     });
     
+    document.getElementById('count-all').textContent = countAll;
     document.getElementById('count-bounced').textContent = countBounced;
     document.getElementById('count-replied').textContent = countReplied;
     document.getElementById('count-read').textContent = countRead;
     document.getElementById('count-unread').textContent = countUnread;
-});
+}
+
+function searchEmails() {
+    const searchTerm = document.getElementById('emailSearchInput').value.toLowerCase().trim();
+    const rows = document.querySelectorAll('.email-row');
+    let visibleCount = 0;
+    let totalCount = rows.length;
+    
+    rows.forEach(row => {
+        // Get email from the second cell (td:nth-child(2))
+        const emailCell = row.children[1];
+        const email = emailCell ? emailCell.textContent.toLowerCase() : '';
+        
+        if (searchTerm === '' || email.includes(searchTerm)) {
+            row.classList.remove('search-hidden');
+            visibleCount++;
+        } else {
+            row.classList.add('search-hidden');
+        }
+    });
+    
+    // Update search results info
+    const searchInfo = document.getElementById('searchResultsInfo');
+    if (searchTerm === '') {
+        searchInfo.textContent = '';
+    } else {
+        searchInfo.textContent = `${visibleCount} / ${totalCount} résultat${visibleCount > 1 ? 's' : ''}`;
+    }
+    
+    // Update tab counts
+    updateTabCounts();
+    
+    // Re-apply current filter
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab) {
+        const filter = activeTab.dataset.filter;
+        applyFilter(filter);
+    }
+}
+
+function clearSearch() {
+    document.getElementById('emailSearchInput').value = '';
+    searchEmails();
+}
 
 function filterEmails(filter, btn) {
     // Mettre à jour les onglets actifs
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     
+    applyFilter(filter);
+}
+
+function applyFilter(filter) {
     // Filtrer les lignes
     const rows = document.querySelectorAll('.email-row');
     
     rows.forEach(row => {
+        // Skip rows hidden by search
+        if (row.classList.contains('search-hidden')) {
+            row.classList.add('hidden');
+            return;
+        }
+        
         const isBounced = row.dataset.bounced === 'true';
         const isReplied = row.dataset.replied === 'true';
         const isRead = row.dataset.read === 'true';
@@ -495,6 +612,13 @@ function filterEmails(filter, btn) {
         
         row.classList.toggle('hidden', !show);
     });
+}
+
+function applyCustomDate() {
+    const dateValue = document.getElementById('customDatePicker').value;
+    if (dateValue) {
+        window.location.href = `{{ url_for('history.history_list') }}?date=custom&custom_date=${dateValue}`;
+    }
 }
 </script>
 {% endblock %}
