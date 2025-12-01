@@ -900,7 +900,7 @@ def history_list():
                     pixel_data = pixel_doc.to_dict()
                     draft_data["open_count"] = pixel_data.get("open_count", 0)
                     draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
-                    draft_data["last_open_at"] = pixel_data.get("last_open_at")
+                    draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
                     
                     if draft_data["open_count"] > 0:
                         total_opened += 1
@@ -970,7 +970,7 @@ def sent_draft_detail(draft_id: str):
                 pixel_data = pixel_doc.to_dict()
                 draft_data["open_count"] = pixel_data.get("open_count", 0)
                 draft_data["first_opened_at"] = pixel_data.get("first_opened_at")
-                draft_data["last_open_at"] = pixel_data.get("last_open_at")
+                draft_data["last_opened_at"] = pixel_data.get("last_opened_at")
                 
                 opens_ref = db.collection(PIXEL_COLLECTION).document(pixel_id).collection("opens").order_by("opened_at", direction=firestore.Query.DESCENDING)
                 for open_doc in opens_ref.stream():

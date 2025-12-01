@@ -387,7 +387,9 @@
                             <span style="color: #27ae60; font-weight: bold;">
                                 ✓ {{ draft.open_count }}x
                             </span>
-                            {% if draft.first_opened_at %}
+                            {% if draft.last_opened_at %}
+                                <br><small style="color: #7f8c8d;">Dernière: {{ draft.last_opened_at.strftime('%d/%m %H:%M') if draft.last_opened_at is not string else draft.last_opened_at }}</small>
+                            {% elif draft.first_opened_at %}
                                 <br><small style="color: #7f8c8d;">{{ draft.first_opened_at.strftime('%d/%m %H:%M') if draft.first_opened_at is not string else draft.first_opened_at }}</small>
                             {% endif %}
                         {% else %}
