@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+
+{% block title %}Prospects - Prospector{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-card.success {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    
+    .stat-card.danger {
+        background: linear-gradient(135deg, #eb3941 0%, #f15e64 100%);
+    }
+    
+    .stat-card.info {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stat-card h3 {
+        font-size: 14px;
+        margin: 0 0 10px 0;
+        opacity: 0.9;
+        font-weight: 500;
+    }
+    
+    .stat-card .value {
+        font-size: 32px;
+        font-weight: bold;
+        margin: 0;
+    }
+    
+    .stat-card .subtitle {
+        font-size: 12px;
+        margin-top: 5px;
+        opacity: 0.8;
+    }
+    
+    /* Tabs */
+    .tabs-container {
+        margin-bottom: 20px;
+    }
+    
+    .tabs {
+        display: flex;
+        gap: 5px;
+        border-bottom: 2px solid #e0e0e0;
+        padding-bottom: 0;
+    }
+    
+    .tab-btn {
+        padding: 12px 20px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #7f8c8d;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        transition: all 0.2s ease;
+    }
+    
+    .tab-btn:hover {
+        color: #3498db;
+        background-color: #f8f9fa;
+    }
+    
+    .tab-btn.active {
+        color: #3498db;
+        border-bottom-color: #3498db;
+    }
+    
+    .tab-btn .count {
+        background-color: #e0e0e0;
+        color: #555;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-left: 8px;
+    }
+    
+    .tab-btn.active .count {
+        background-color: #3498db;
+        color: white;
+    }
+    
+    .tab-btn.success .count {
+        background-color: #c8e6c9;
+        color: #2e7d32;
+    }
+    
+    .tab-btn.success.active {
+        color: #27ae60;
+        border-bottom-color: #27ae60;
+    }
+    
+    .tab-btn.success.active .count {
+        background-color: #27ae60;
+        color: white;
+    }
+    
+    .tab-btn.danger .count {
+        background-color: #ffcdd2;
+        color: #c62828;
+    }
+    
+    .tab-btn.danger.active {
+        color: #e74c3c;
+        border-bottom-color: #e74c3c;
+    }
+    
+    .tab-btn.danger.active .count {
+        background-color: #e74c3c;
+        color: white;
+    }
+    
+    .tab-btn.warning .count {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .tab-btn.warning.active {
+        color: #f39c12;
+        border-bottom-color: #f39c12;
+    }
+    
+    .tab-btn.warning.active .count {
+        background-color: #f39c12;
+        color: white;
+    }
+    
+    /* Prospect cards */
+    .prospect-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 20px;
+    }
+    
+    .prospect-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 20px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    
+    .prospect-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .prospect-card.replied {
+        border-left: 4px solid #27ae60;
+    }
+    
+    .prospect-card.bounced {
+        border-left: 4px solid #e74c3c;
+        background-color: #fff5f5;
+    }
+    
+    .prospect-card.opened {
+        border-left: 4px solid #3498db;
+    }
+    
+    .prospect-card.pending-followup {
+        border-left: 4px solid #f39c12;
+    }
+    
+    .prospect-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    
+    .prospect-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: #2c3e50;
+        margin: 0;
+    }
+    
+    .prospect-company {
+        font-size: 13px;
+        color: #7f8c8d;
+        margin: 4px 0 0 0;
+    }
+    
+    .prospect-email {
+        font-size: 12px;
+        color: #95a5a6;
+        margin: 2px 0 0 0;
+    }
+    
+    .prospect-badges {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    
+    .badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+    
+    .badge-replied {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .badge-opened {
+        background: #cce5ff;
+        color: #004085;
+    }
+    
+    .badge-bounced {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .badge-followup {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .prospect-stats {
+        display: flex;
+        gap: 15px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #eee;
+        font-size: 12px;
+        color: #7f8c8d;
+    }
+    
+    .prospect-stats span {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .prospect-date {
+        font-size: 11px;
+        color: #95a5a6;
+        margin-top: 8px;
+    }
+    
+    .prospect-row {
+        display: table-row;
+    }
+    
+    .prospect-row.hidden {
+        display: none;
+    }
+    
+    /* Search */
+    .search-container {
+        margin-bottom: 20px;
+    }
+    
+    .search-input {
+        width: 100%;
+        max-width: 400px;
+        padding: 12px 16px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+    
+    .search-input:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    }
+    
+    /* Date filter */
+    .date-filter-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .date-filter-label {
+        font-weight: 500;
+        color: #555;
+    }
+    
+    .date-filter-buttons {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    
+    .date-filter-btn {
+        padding: 8px 16px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .date-filter-btn:hover {
+        background: #f8f9fa;
+        border-color: #3498db;
+    }
+    
+    .date-filter-btn.active {
+        background: #3498db;
+        color: white;
+        border-color: #3498db;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Statistiques globales -->
+{% if stats %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>👥 Prospects contactés</h3>
+        <div class="value">{{ stats.total_prospects }}</div>
+    </div>
+    
+    <div class="stat-card success">
+        <h3>💬 Réponses reçues</h3>
+        <div class="value">{{ stats.reply_rate }}%</div>
+        <div class="subtitle">{{ stats.total_replied }} réponses</div>
+    </div>
+    
+    <div class="stat-card info">
+        <h3>👁️ Ont ouvert</h3>
+        <div class="value">{{ stats.open_rate }}%</div>
+        <div class="subtitle">{{ stats.total_opened }} ouvertures</div>
+    </div>
+    
+    <div class="stat-card danger">
+        <h3>❌ Bounces</h3>
+        <div class="value">{{ stats.bounce_rate }}%</div>
+        <div class="subtitle">{{ stats.total_bounced }} bounces</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2 style="margin-bottom: 20px;">👥 Prospects</h2>
+    
+    <!-- Recherche -->
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="🔍 Rechercher un prospect (nom, email, entreprise...)">
+    </div>
+    
+    <!-- Filtre par date -->
+    <div class="date-filter-container">
+        <span class="date-filter-label">📅 Période :</span>
+        <div class="date-filter-buttons">
+            <a href="{{ url_for('prospects.prospects_list') }}" class="date-filter-btn {{ 'active' if date_filter == 'all' else '' }}">Tous</a>
+            <a href="{{ url_for('prospects.prospects_list', date='today') }}" class="date-filter-btn {{ 'active' if date_filter == 'today' else '' }}">Aujourd'hui</a>
+            <a href="{{ url_for('prospects.prospects_list', date='week') }}" class="date-filter-btn {{ 'active' if date_filter == 'week' else '' }}">7 derniers jours</a>
+            <a href="{{ url_for('prospects.prospects_list', date='month') }}" class="date-filter-btn {{ 'active' if date_filter == 'month' else '' }}">30 derniers jours</a>
+        </div>
+    </div>
+    
+    <!-- Onglets de filtrage -->
+    <div class="tabs-container">
+        <div class="tabs">
+            <button class="tab-btn active" data-filter="all" onclick="filterProspects('all', this)">
+                👥 Tous <span class="count" id="count-all">{{ prospects|length }}</span>
+            </button>
+            <button class="tab-btn success" data-filter="replied" onclick="filterProspects('replied', this)">
+                💬 Ont répondu <span class="count" id="count-replied">0</span>
+            </button>
+            <button class="tab-btn" data-filter="opened" onclick="filterProspects('opened', this)">
+                👁️ Ont ouvert <span class="count" id="count-opened">0</span>
+            </button>
+            <button class="tab-btn warning" data-filter="pending" onclick="filterProspects('pending', this)">
+                ⏳ En attente <span class="count" id="count-pending">0</span>
+            </button>
+            <button class="tab-btn danger" data-filter="bounced" onclick="filterProspects('bounced', this)">
+                ❌ Bounce <span class="count" id="count-bounced">0</span>
+            </button>
+        </div>
+    </div>
+    
+    {% if prospects %}
+        <div class="prospect-grid" id="prospectsGrid">
+            {% for prospect in prospects %}
+            <div class="prospect-card 
+                {% if prospect.has_bounce %}bounced{% elif prospect.has_reply %}replied{% elif prospect.open_count and prospect.open_count > 0 %}opened{% elif prospect.scheduled_followups > 0 %}pending-followup{% endif %}"
+                data-search="{{ prospect.contact_name|lower }} {{ prospect.partner_name|lower }} {{ prospect.to|lower }}"
+                data-bounced="{{ 'true' if prospect.has_bounce else 'false' }}"
+                data-replied="{{ 'true' if prospect.has_reply else 'false' }}"
+                data-opened="{{ 'true' if prospect.open_count and prospect.open_count > 0 else 'false' }}"
+                data-pending="{{ 'true' if not prospect.has_reply and not prospect.has_bounce else 'false' }}"
+                onclick="window.location.href='{{ url_for('prospects.prospect_detail', draft_id=prospect.id) }}'">
+                
+                <div class="prospect-header">
+                    <div>
+                        <h3 class="prospect-name">{{ prospect.contact_name or 'Inconnu' }}</h3>
+                        <p class="prospect-company">{{ prospect.partner_name or '-' }}</p>
+                        <p class="prospect-email">{{ prospect.to }}</p>
+                    </div>
+                    <div class="prospect-badges">
+                        {% if prospect.has_reply %}
+                            <span class="badge badge-replied">💬 Répondu</span>
+                        {% endif %}
+                        {% if prospect.has_bounce %}
+                            <span class="badge badge-bounced">❌ Bounce</span>
+                        {% elif prospect.open_count and prospect.open_count > 0 %}
+                            <span class="badge badge-opened">👁️ {{ prospect.open_count }}x</span>
+                        {% endif %}
+                        {% if prospect.scheduled_followups and prospect.scheduled_followups > 0 %}
+                            <span class="badge badge-followup">🔄 {{ prospect.scheduled_followups }} relance(s)</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="prospect-stats">
+                    <span>📧 {{ prospect.total_emails or 1 }} email(s)</span>
+                    {% if prospect.sent_followups and prospect.sent_followups > 0 %}
+                        <span>🔄 {{ prospect.sent_followups }} relance(s) envoyée(s)</span>
+                    {% endif %}
+                </div>
+                
+                <div class="prospect-date">
+                    Premier contact : 
+                    {% if prospect.sent_at %}
+                        {{ prospect.sent_at.strftime('%d/%m/%Y') if prospect.sent_at is not string else prospect.sent_at[:10] }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p>Aucun prospect contacté pour le moment</p>
+        </div>
+    {% endif %}
+</div>
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('main.index') }}" class="btn btn-secondary">← Retour aux drafts en attente</a>
+</div>
+
+<script>
+// Compter et initialiser les onglets
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.prospect-card');
+    let countBounced = 0, countReplied = 0, countOpened = 0, countPending = 0;
+    
+    cards.forEach(card => {
+        const isBounced = card.dataset.bounced === 'true';
+        const isReplied = card.dataset.replied === 'true';
+        const isOpened = card.dataset.opened === 'true';
+        const isPending = card.dataset.pending === 'true';
+        
+        if (isBounced) countBounced++;
+        if (isReplied) countReplied++;
+        if (isOpened && !isBounced && !isReplied) countOpened++;
+        if (isPending) countPending++;
+    });
+    
+    document.getElementById('count-bounced').textContent = countBounced;
+    document.getElementById('count-replied').textContent = countReplied;
+    document.getElementById('count-opened').textContent = countOpened;
+    document.getElementById('count-pending').textContent = countPending;
+});
+
+function filterProspects(filter, btn) {
+    // Mettre à jour les onglets actifs
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Filtrer les cartes
+    const cards = document.querySelectorAll('.prospect-card');
+    
+    cards.forEach(card => {
+        const isBounced = card.dataset.bounced === 'true';
+        const isReplied = card.dataset.replied === 'true';
+        const isOpened = card.dataset.opened === 'true';
+        const isPending = card.dataset.pending === 'true';
+        
+        let show = false;
+        
+        switch(filter) {
+            case 'all':
+                show = true;
+                break;
+            case 'bounced':
+                show = isBounced;
+                break;
+            case 'replied':
+                show = isReplied;
+                break;
+            case 'opened':
+                show = isOpened && !isBounced && !isReplied;
+                break;
+            case 'pending':
+                show = isPending;
+                break;
+        }
+        
+        card.style.display = show ? 'block' : 'none';
+    });
+}
+
+// Recherche
+document.getElementById('searchInput').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const cards = document.querySelectorAll('.prospect-card');
+    
+    cards.forEach(card => {
+        const searchData = card.dataset.search;
+        if (searchData.includes(searchTerm)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    
+    // Réinitialiser les onglets
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.tab-btn[data-filter="all"]').classList.add('active');
+});
+</script>
+{% endblock %}

@@ -1510,3 +1510,237 @@ def cancel_all_followups(draft_id: str):
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(request.form.get("next") or url_for("history.sent_draft_detail", draft_id=draft_id))
+
+
+# ============================================================================
+# Prospects Blueprint
+# ============================================================================
+
+prospects_bp = Blueprint("prospects", __name__, url_prefix="/prospects")
+
+
+@prospects_bp.route("/")
+def prospects_list():
+    """Show prospects list (grouped by email/prospect)."""
+    try:
+        from datetime import timedelta
+        
+        # Récupérer le filtre de date
+        date_filter = request.args.get("date", "all")
+        
+        # Calculer les dates de début et fin selon le filtre
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        date_start = None
+        date_end = None
+        
+        if date_filter == "today":
+            date_start = today
+            date_end = today + timedelta(days=1)
+        elif date_filter == "week":
+            date_start = today - timedelta(days=7)
+            date_end = today + timedelta(days=1)
+        elif date_filter == "month":
+            date_start = today - timedelta(days=30)
+            date_end = today + timedelta(days=1)
+        
+        # Construire la requête - on prend les premiers emails envoyés (pas les followups)
+        if date_start and date_end:
+            sent_drafts_ref = (
+                db.collection(DRAFT_COLLECTION)
+                .where("status", "==", "sent")
+                .where("is_followup", "==", False)
+                .where("sent_at", ">=", date_start)
+                .where("sent_at", "<", date_end)
+                .order_by("sent_at", direction=firestore.Query.DESCENDING)
+                .limit(200)
+            )
+        else:
+            # Sans filtre is_followup pour éviter les problèmes d'index
+            sent_drafts_ref = (
+                db.collection(DRAFT_COLLECTION)
+                .where("status", "==", "sent")
+                .order_by("sent_at", direction=firestore.Query.DESCENDING)
+                .limit(200)
+            )
+        
+        prospects = []
+        total_opened = 0
+        total_bounced = 0
+        total_replied = 0
+        
+        for doc in sent_drafts_ref.stream():
+            draft_data = doc.to_dict()
+            
+            # Filtrer les followups si pas de filtre de date
+            if not date_start and (draft_data.get("is_followup") or draft_data.get("followup_number", 0) > 0):
+                continue
+            
+            draft_data["id"] = doc.id
+            
+            # Récupérer les stats d'ouverture
+            pixel_id = draft_data.get("pixel_id")
+            if pixel_id:
+                pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
+                if pixel_doc.exists:
+                    pixel_data = pixel_doc.to_dict()
+                    draft_data["open_count"] = pixel_data.get("open_count", 0)
+                    if draft_data["open_count"] > 0:
+                        total_opened += 1
+            
+            if draft_data.get("has_bounce"):
+                total_bounced += 1
+            
+            if draft_data.get("has_reply"):
+                total_replied += 1
+            
+            # Compter les followups
+            followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id)
+            followups = list(followups_ref.stream())
+            draft_data["total_followups"] = len(followups)
+            draft_data["scheduled_followups"] = len([f for f in followups if f.to_dict().get("status") == "scheduled"])
+            draft_data["sent_followups"] = len([f for f in followups if f.to_dict().get("status") == "sent"])
+            draft_data["total_emails"] = 1 + draft_data["sent_followups"]
+            
+            prospects.append(draft_data)
+        
+        total_prospects = len(prospects)
+        open_rate = (total_opened / total_prospects * 100) if total_prospects > 0 else 0
+        bounce_rate = (total_bounced / total_prospects * 100) if total_prospects > 0 else 0
+        reply_rate = (total_replied / total_prospects * 100) if total_prospects > 0 else 0
+        
+        stats = {
+            "total_prospects": total_prospects,
+            "total_opened": total_opened,
+            "total_bounced": total_bounced,
+            "total_replied": total_replied,
+            "open_rate": round(open_rate, 1),
+            "bounce_rate": round(bounce_rate, 1),
+            "reply_rate": round(reply_rate, 1)
+        }
+        
+        return render_template("prospects.html", prospects=prospects, stats=stats, date_filter=date_filter)
+    
+    except Exception as e:
+        flash(f"Erreur lors de la récupération des prospects: {str(e)}", "error")
+        return render_template("prospects.html", prospects=[], stats={}, date_filter="all")
+
+
+@prospects_bp.route("/<draft_id>")
+def prospect_detail(draft_id: str):
+    """Show prospect details with timeline, replies, and followups."""
+    try:
+        # Récupérer le draft principal
+        doc_ref = db.collection(DRAFT_COLLECTION).document(draft_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Prospect non trouvé", "error")
+            return redirect(url_for("prospects.prospects_list"))
+        
+        prospect = doc.to_dict()
+        prospect["id"] = doc.id
+        
+        # Récupérer les stats d'ouverture
+        pixel_id = prospect.get("pixel_id")
+        if pixel_id:
+            pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
+            if pixel_doc.exists:
+                pixel_data = pixel_doc.to_dict()
+                prospect["open_count"] = pixel_data.get("open_count", 0)
+                prospect["first_opened_at"] = pixel_data.get("first_opened_at")
+        
+        # Récupérer les followups
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", draft_id).order_by("days_after_initial")
+        followups = []
+        for followup_doc in followups_ref.stream():
+            followup_data = followup_doc.to_dict()
+            followup_data["id"] = followup_doc.id
+            followups.append(followup_data)
+        
+        prospect["scheduled_followups"] = len([f for f in followups if f.get("status") == "scheduled"])
+        
+        # Construire la timeline
+        timeline_items = []
+        
+        # Email initial
+        timeline_items.append({
+            "type": "sent",
+            "date": prospect.get("sent_at"),
+            "subject": prospect.get("subject"),
+            "body": prospect.get("body")
+        })
+        
+        # Bounce si applicable
+        if prospect.get("has_bounce"):
+            timeline_items.append({
+                "type": "bounce",
+                "date": prospect.get("bounce_detected_at") or prospect.get("sent_at"),
+                "subject": None,
+                "body": prospect.get("bounce_reason")
+            })
+        
+        # Réponses
+        replies = []
+        if prospect.get("has_reply"):
+            # Réponse directe à l'email initial
+            if prospect.get("reply_message") or prospect.get("reply_snippet"):
+                reply_item = {
+                    "received_at": prospect.get("reply_received_at"),
+                    "subject": prospect.get("reply_subject"),
+                    "body": prospect.get("reply_message") or prospect.get("reply_snippet", ""),
+                    "type": "direct"
+                }
+                replies.append(reply_item)
+                timeline_items.append({
+                    "type": "reply",
+                    "date": prospect.get("reply_received_at"),
+                    "subject": prospect.get("reply_subject"),
+                    "body": prospect.get("reply_message") or prospect.get("reply_snippet", "")
+                })
+            
+            # Réponse à un followup (stockée sur le draft original)
+            if prospect.get("followup_reply_message"):
+                followup_reply_item = {
+                    "received_at": prospect.get("reply_received_at"),  # Utilise le même timestamp (mis à jour)
+                    "subject": prospect.get("followup_reply_subject"),
+                    "body": prospect.get("followup_reply_message"),
+                    "type": "followup_reply",
+                    "followup_number": prospect.get("followup_replied_number", 0)
+                }
+                replies.append(followup_reply_item)
+                timeline_items.append({
+                    "type": "reply",
+                    "date": prospect.get("reply_received_at"),
+                    "subject": prospect.get("followup_reply_subject") or f"Réponse à la relance {prospect.get('followup_replied_number', '')}",
+                    "body": prospect.get("followup_reply_message")
+                })
+        
+        # Followups envoyés
+        for followup in followups:
+            if followup.get("status") == "sent":
+                timeline_items.append({
+                    "type": "followup",
+                    "date": followup.get("sent_at"),
+                    "subject": followup.get("subject"),
+                    "body": followup.get("body"),
+                    "followup_number": followup.get("followup_number")
+                })
+        
+        # Trier par date
+        timeline_items.sort(key=lambda x: x.get("date") or datetime.min, reverse=False)
+        
+        # Calculer le total d'emails
+        total_emails = 1 + len([f for f in followups if f.get("status") == "sent"])
+        
+        return render_template(
+            "prospect_detail.html",
+            prospect=prospect,
+            followups=followups,
+            replies=replies,
+            timeline_items=timeline_items,
+            total_emails=total_emails
+        )
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("prospects.prospects_list"))

@@ -165,12 +165,11 @@ ruff check src/
 ## Deployment
 
 ```bash
-gcloud builds submit --tag gcr.io/PROJECT_ID/prospector-ui
 gcloud run deploy prospector-ui \
-  --image gcr.io/PROJECT_ID/prospector-ui \
+  --source . \
   --region europe-west1 \
-  --platform managed
 ```
+
 
 ## License
 

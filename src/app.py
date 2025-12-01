@@ -20,6 +20,7 @@ from src.blueprints import (
     history_bp,
     kanban_bp,
     main_bp,
+    prospects_bp,
 )
 from src.config import get_settings
 
@@ -64,6 +65,7 @@ def create_app() -> Flask:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(kanban_bp)
     app.register_blueprint(followups_bp)
+    app.register_blueprint(prospects_bp)
     
     # Error handlers
     @app.errorhandler(404)

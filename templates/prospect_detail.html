@@ -1,0 +1,564 @@
+{% extends "base.html" %}
+
+{% block title %}{{ prospect.contact_name or prospect.to }} - Prospector{% endblock %}
+
+{% block extra_css %}
+<style>
+    .prospect-header-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    
+    .prospect-header-card h1 {
+        font-size: 28px;
+        margin: 0 0 8px 0;
+    }
+    
+    .prospect-header-card .company {
+        font-size: 18px;
+        opacity: 0.9;
+        margin: 0 0 4px 0;
+    }
+    
+    .prospect-header-card .email {
+        font-size: 14px;
+        opacity: 0.8;
+    }
+    
+    .prospect-header-card .badges {
+        margin-top: 15px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .prospect-header-card .badge {
+        background: rgba(255,255,255,0.2);
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+    }
+    
+    .prospect-header-card .badge.success {
+        background: rgba(46, 204, 113, 0.3);
+    }
+    
+    .prospect-header-card .badge.danger {
+        background: rgba(231, 76, 60, 0.3);
+    }
+    
+    /* Tabs for sections */
+    .section-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid #e0e0e0;
+        margin-bottom: 20px;
+    }
+    
+    .section-tab {
+        padding: 15px 25px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 500;
+        color: #7f8c8d;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        transition: all 0.2s ease;
+    }
+    
+    .section-tab:hover {
+        color: #3498db;
+        background-color: #f8f9fa;
+    }
+    
+    .section-tab.active {
+        color: #3498db;
+        border-bottom-color: #3498db;
+    }
+    
+    .section-tab .count {
+        background-color: #e0e0e0;
+        color: #555;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-left: 8px;
+    }
+    
+    .section-tab.active .count {
+        background-color: #3498db;
+        color: white;
+    }
+    
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    /* Timeline */
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 10px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e0e0e0;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 25px;
+        padding: 20px;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+    }
+    
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -24px;
+        top: 25px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #3498db;
+        border: 2px solid white;
+        box-shadow: 0 0 0 2px #3498db;
+    }
+    
+    .timeline-item.sent::before {
+        background: #3498db;
+        box-shadow: 0 0 0 2px #3498db;
+    }
+    
+    .timeline-item.reply::before {
+        background: #27ae60;
+        box-shadow: 0 0 0 2px #27ae60;
+    }
+    
+    .timeline-item.followup::before {
+        background: #f39c12;
+        box-shadow: 0 0 0 2px #f39c12;
+    }
+    
+    .timeline-item.bounce::before {
+        background: #e74c3c;
+        box-shadow: 0 0 0 2px #e74c3c;
+    }
+    
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .timeline-title {
+        font-weight: 600;
+        font-size: 14px;
+        color: #2c3e50;
+    }
+    
+    .timeline-date {
+        font-size: 12px;
+        color: #95a5a6;
+    }
+    
+    .timeline-subject {
+        font-weight: 500;
+        margin-bottom: 10px;
+        color: #34495e;
+    }
+    
+    .timeline-body {
+        font-size: 14px;
+        color: #555;
+        line-height: 1.6;
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+    
+    .timeline-toggle {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #3498db;
+        cursor: pointer;
+        display: inline-block;
+    }
+    
+    .timeline-toggle:hover {
+        text-decoration: underline;
+    }
+    
+    /* Stats cards */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-mini {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-mini .icon {
+        font-size: 24px;
+        margin-bottom: 5px;
+    }
+    
+    .stat-mini .value {
+        font-size: 20px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    
+    .stat-mini .label {
+        font-size: 12px;
+        color: #7f8c8d;
+    }
+    
+    /* Followup list */
+    .followup-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .followup-item {
+        display: flex;
+        align-items: center;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #e0e0e0;
+    }
+    
+    .followup-item.sent {
+        border-left-color: #27ae60;
+    }
+    
+    .followup-item.scheduled {
+        border-left-color: #f39c12;
+    }
+    
+    .followup-item.cancelled {
+        border-left-color: #95a5a6;
+        opacity: 0.7;
+    }
+    
+    .followup-number {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #e0e0e0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        margin-right: 15px;
+    }
+    
+    .followup-item.sent .followup-number {
+        background: #27ae60;
+        color: white;
+    }
+    
+    .followup-item.scheduled .followup-number {
+        background: #f39c12;
+        color: white;
+    }
+    
+    .followup-info {
+        flex: 1;
+    }
+    
+    .followup-title {
+        font-weight: 500;
+        color: #2c3e50;
+    }
+    
+    .followup-date {
+        font-size: 12px;
+        color: #7f8c8d;
+    }
+    
+    .followup-status {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .followup-status.sent {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .followup-status.scheduled {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .followup-status.cancelled {
+        background: #e9ecef;
+        color: #6c757d;
+    }
+    
+    /* Actions */
+    .actions-bar {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header du prospect -->
+<div class="prospect-header-card">
+    <h1>{{ prospect.contact_name or 'Prospect inconnu' }}</h1>
+    <p class="company">{{ prospect.partner_name or '-' }}</p>
+    <p class="email">{{ prospect.to }}</p>
+    
+    <div class="badges">
+        {% if prospect.has_reply %}
+            <span class="badge success">💬 A répondu</span>
+        {% endif %}
+        {% if prospect.has_bounce %}
+            <span class="badge danger">❌ Bounce</span>
+        {% endif %}
+        {% if prospect.open_count and prospect.open_count > 0 %}
+            <span class="badge">👁️ Ouvert {{ prospect.open_count }}x</span>
+        {% endif %}
+        <span class="badge">📧 {{ total_emails }} email(s) envoyé(s)</span>
+    </div>
+</div>
+
+<!-- Stats rapides -->
+<div class="stats-row">
+    <div class="stat-mini">
+        <div class="icon">📧</div>
+        <div class="value">{{ total_emails }}</div>
+        <div class="label">Emails envoyés</div>
+    </div>
+    <div class="stat-mini">
+        <div class="icon">👁️</div>
+        <div class="value">{{ prospect.open_count or 0 }}</div>
+        <div class="label">Ouvertures</div>
+    </div>
+    <div class="stat-mini">
+        <div class="icon">💬</div>
+        <div class="value">{{ replies|length }}</div>
+        <div class="label">Réponses</div>
+    </div>
+    <div class="stat-mini">
+        <div class="icon">🔄</div>
+        <div class="value">{{ followups|length }}</div>
+        <div class="label">Relances</div>
+    </div>
+</div>
+
+<div class="card">
+    <!-- Onglets -->
+    <div class="section-tabs">
+        <button class="section-tab active" onclick="showTab('timeline', this)">
+            📋 Timeline <span class="count">{{ timeline_items|length }}</span>
+        </button>
+        <button class="section-tab" onclick="showTab('replies', this)">
+            💬 Réponses <span class="count">{{ replies|length }}</span>
+        </button>
+        <button class="section-tab" onclick="showTab('followups', this)">
+            🔄 Relances <span class="count">{{ followups|length }}</span>
+        </button>
+    </div>
+    
+    <!-- Contenu Timeline -->
+    <div id="timeline" class="tab-content active">
+        {% if timeline_items %}
+        <div class="timeline">
+            {% for item in timeline_items %}
+            <div class="timeline-item {{ item.type }}">
+                <div class="timeline-header">
+                    <span class="timeline-title">
+                        {% if item.type == 'sent' %}
+                            📧 Email initial envoyé
+                        {% elif item.type == 'reply' %}
+                            💬 Réponse reçue
+                        {% elif item.type == 'followup' %}
+                            🔄 Relance {{ item.followup_number }} envoyée
+                        {% elif item.type == 'bounce' %}
+                            ❌ Bounce détecté
+                        {% endif %}
+                    </span>
+                    <span class="timeline-date">
+                        {{ item.date.strftime('%d/%m/%Y à %H:%M') if item.date is not string else item.date }}
+                    </span>
+                </div>
+                
+                {% if item.subject %}
+                <div class="timeline-subject">{{ item.subject }}</div>
+                {% endif %}
+                
+                {% if item.body %}
+                <div class="timeline-body" id="body-{{ loop.index }}" style="display: none;">
+                    {{ item.body|safe }}
+                </div>
+                <span class="timeline-toggle" onclick="toggleBody({{ loop.index }})">
+                    ▶ Voir le contenu
+                </span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>Aucun historique disponible</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Contenu Réponses -->
+    <div id="replies" class="tab-content">
+        {% if replies %}
+        <div class="timeline">
+            {% for reply in replies %}
+            <div class="timeline-item reply">
+                <div class="timeline-header">
+                    <span class="timeline-title">
+                        {% if reply.type == 'followup_reply' %}
+                            💬 Réponse à la relance {{ reply.followup_number }}
+                        {% else %}
+                            💬 Réponse à l'email initial
+                        {% endif %}
+                    </span>
+                    <span class="timeline-date">
+                        {{ reply.received_at.strftime('%d/%m/%Y à %H:%M') if reply.received_at is not string else reply.received_at }}
+                    </span>
+                </div>
+                {% if reply.subject %}
+                <div class="timeline-subject">{{ reply.subject }}</div>
+                {% endif %}
+                <div class="timeline-body">
+                    {{ reply.body|safe }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>Aucune réponse reçue</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Contenu Relances -->
+    <div id="followups" class="tab-content">
+        {% if followups %}
+        <div class="followup-list">
+            {% for followup in followups %}
+            <div class="followup-item {{ followup.status }}">
+                <div class="followup-number">{{ followup.followup_number or loop.index }}</div>
+                <div class="followup-info">
+                    <div class="followup-title">
+                        Relance {{ followup.followup_number or loop.index }}
+                        {% if followup.days_after_initial %}
+                            (J+{{ followup.days_after_initial }})
+                        {% endif %}
+                    </div>
+                    <div class="followup-date">
+                        {% if followup.status == 'sent' %}
+                            Envoyée le {{ followup.sent_at.strftime('%d/%m/%Y à %H:%M') if followup.sent_at is not string else followup.sent_at }}
+                        {% elif followup.status == 'scheduled' %}
+                            Planifiée pour le {{ followup.scheduled_for.strftime('%d/%m/%Y') if followup.scheduled_for is not string else followup.scheduled_for }}
+                        {% elif followup.status == 'cancelled' %}
+                            Annulée
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="followup-status {{ followup.status }}">
+                    {% if followup.status == 'sent' %}✓ Envoyée{% elif followup.status == 'scheduled' %}⏱ Planifiée{% else %}✗ Annulée{% endif %}
+                </span>
+                
+                {% if followup.status == 'scheduled' %}
+                <form method="POST" action="{{ url_for('followups.cancel_followup', followup_id=followup.id) }}" style="margin-left: 10px;">
+                    <input type="hidden" name="next" value="{{ url_for('prospects.prospect_detail', draft_id=prospect.id) }}">
+                    <button type="submit" class="btn btn-danger" style="font-size: 11px; padding: 4px 8px;">Annuler</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>Aucune relance planifiée</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="actions-bar">
+    <a href="{{ url_for('prospects.prospects_list') }}" class="btn btn-secondary">← Retour aux prospects</a>
+    <a href="{{ url_for('history.sent_draft_detail', draft_id=prospect.id) }}" class="btn btn-primary">📧 Voir le détail email</a>
+    {% if prospect.scheduled_followups and prospect.scheduled_followups > 0 %}
+    <form method="POST" action="{{ url_for('followups.cancel_all_followups', draft_id=prospect.id) }}" style="display: inline;">
+        <input type="hidden" name="next" value="{{ url_for('prospects.prospect_detail', draft_id=prospect.id) }}">
+        <button type="submit" class="btn btn-warning">🚫 Annuler toutes les relances</button>
+    </form>
+    {% endif %}
+</div>
+
+<script>
+function showTab(tabId, btn) {
+    // Masquer tous les contenus
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Désactiver tous les onglets
+    document.querySelectorAll('.section-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Afficher le contenu sélectionné
+    document.getElementById(tabId).classList.add('active');
+    btn.classList.add('active');
+}
+
+function toggleBody(index) {
+    const body = document.getElementById('body-' + index);
+    const toggle = body.previousElementSibling.nextElementSibling;
+    
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        toggle.textContent = '▼ Masquer le contenu';
+    } else {
+        body.style.display = 'none';
+        toggle.textContent = '▶ Voir le contenu';
+    }
+}
+</script>
+{% endblock %}
