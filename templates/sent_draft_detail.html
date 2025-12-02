@@ -411,13 +411,10 @@
                 {% if draft.bounce_reason %}
                 <div class="sub-value" style="font-size: 11px;">{{ draft.bounce_reason[:60] }}...</div>
                 {% endif %}
-            {% elif draft.reply_received_at %}
+            {% elif draft.first_reply_at %}
                 <div class="sub-value">
-                    {{ draft.reply_received_at.strftime('%d/%m/%Y %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}
+                    {{ draft.first_reply_at.strftime('%d/%m/%Y %H:%M') if draft.first_reply_at is not string else draft.first_reply_at }}
                 </div>
-            {% endif %}
-            {% if draft.reply_from %}
-                <div class="sub-value">De: {{ draft.reply_from }}</div>
             {% endif %}
         </div>
         
@@ -692,88 +689,21 @@
                     </div>
                     {% endif %}
                     
-                    <!-- Réponse si reçue -->
-                    {% if draft.has_reply %}
-                    
-                    <!-- Réponse directe à l'email initial -->
-                    {% if draft.reply_message %}
+                    <!-- Réponse si reçue : affichée via thread_messages -->
+                    {% if draft.has_reply and not thread_messages %}
                     <div class="message received">
                         <div class="message-header">
-                            <span class="message-type received">✓ Reçu</span>
+                            <span class="message-type received">✓ Réponse reçue</span>
                             <span class="message-date">
-                                {% if draft.reply_received_at %}
-                                    {{ draft.reply_received_at.strftime('%d/%m/%Y %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}
+                                {% if draft.first_reply_at %}
+                                    {{ draft.first_reply_at.strftime('%d/%m/%Y %H:%M') if draft.first_reply_at is not string else draft.first_reply_at }}
                                 {% endif %}
                             </span>
                         </div>
-                        <div class="message-from">De : {{ draft.reply_from }}</div>
-                        {% if draft.reply_subject %}
-                        <div class="message-subject">{{ draft.reply_subject }}</div>
-                        {% endif %}
                         <div class="message-body markdown-content">
-                            {% set clean_reply = draft.reply_message.split('Le ')[0].split('On ')[0].split('From:')[0].split('De :')[0].split('-----')[0].split('___')[0].strip() %}
-                            {{ clean_reply|markdown if clean_reply else draft.reply_message|markdown }}
-                            
-                            {% if draft.reply_message|length > clean_reply|length + 50 %}
-                            <div class="quoted-text">
-                                <details>
-                                    <summary style="cursor: pointer; color: #7f8c8d; font-size: 11px;">Afficher le message cité...</summary>
-                                    {{ draft.reply_message[clean_reply|length:]|markdown }}
-                                </details>
-                            </div>
-                            {% endif %}
+                            <p style="color: #95a5a6; font-style: italic;">La conversation complète est récupérée depuis Gmail...</p>
                         </div>
                     </div>
-                    {% endif %}
-                    
-                    <!-- Réponse à un followup -->
-                    {% if draft.followup_reply_message %}
-                    <div class="message followup_reply">
-                        <div class="message-header">
-                            <span class="message-type followup_reply">✓ Réponse à relance {{ draft.followup_replied_number or '' }}</span>
-                            <span class="message-date">
-                                {% if draft.reply_received_at %}
-                                    {{ draft.reply_received_at.strftime('%d/%m/%Y %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="message-from">De : {{ draft.reply_from }}</div>
-                        {% if draft.followup_reply_subject %}
-                        <div class="message-subject">{{ draft.followup_reply_subject }}</div>
-                        {% endif %}
-                        <div class="message-body markdown-content">
-                            {% set clean_followup_reply = draft.followup_reply_message.split('Le ')[0].split('On ')[0].split('From:')[0].split('De :')[0].split('-----')[0].split('___')[0].strip() %}
-                            {{ clean_followup_reply|markdown if clean_followup_reply else draft.followup_reply_message|markdown }}
-                        </div>
-                    </div>
-                    {% endif %}
-                    
-                    <!-- Si has_reply mais pas de message stocké -->
-                    {% if not draft.reply_message and not draft.followup_reply_message %}
-                    <div class="message received">
-                        <div class="message-header">
-                            <span class="message-type received">✓ Reçu</span>
-                            <span class="message-date">
-                                {% if draft.reply_received_at %}
-                                    {{ draft.reply_received_at.strftime('%d/%m/%Y %H:%M') if draft.reply_received_at is not string else draft.reply_received_at }}
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="message-from">De : {{ draft.reply_from }}</div>
-                        {% if draft.reply_subject %}
-                        <div class="message-subject">{{ draft.reply_subject }}</div>
-                        {% endif %}
-                        <div class="message-body markdown-content">
-                            <p style="color: #95a5a6; font-style: italic;">Le contenu de la réponse n'a pas été stocké.</p>
-                            <form method="POST" action="{{ url_for('history.fetch_reply', draft_id=draft.id) }}" style="margin-top: 10px;">
-                                <button type="submit" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">
-                                    🔄 Récupérer la réponse depuis Gmail
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                    {% endif %}
-                    
                     {% endif %}
                     
                     {% if not draft.has_reply and not draft.has_bounce and draft.gmail_thread_id %}

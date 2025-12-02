@@ -1006,40 +1006,40 @@ def sent_draft_detail(draft_id: str):
         draft_data["sent_followups"] = sent_followups
         draft_data["cancelled_followups"] = cancelled_followups
         
+        # Récupérer les messages du thread depuis Gmail si has_reply ou si thread_id existe
         thread_messages = []
-        if draft_data.get("gmail_thread_id"):
-            thread_ref = doc_ref.collection('thread_messages').order_by('timestamp')
-            thread_count = 0
-            for msg_doc in thread_ref.stream():
-                msg_data = msg_doc.to_dict()
-                msg_data["id"] = msg_doc.id
-                thread_messages.append(msg_data)
-                thread_count += 1
-            
-            if thread_count == 0:
-                try:
-                    fetch_thread_messages_from_gmail(draft_id)
-                    thread_messages = []
-                    for msg_doc in thread_ref.stream():
-                        msg_data = msg_doc.to_dict()
-                        msg_data["id"] = msg_doc.id
-                        thread_messages.append(msg_data)
-                except Exception as fetch_error:
-                    print(f"[WARNING] Impossible de récupérer le thread: {fetch_error}")
-        
-        if draft_data.get("has_reply") and not draft_data.get("reply_message"):
+        if draft_data.get("gmail_thread_id") and (draft_data.get("has_reply") or draft_data.get("has_bounce")):
             try:
-                fetch_missing_reply(draft_id)
-                updated_doc = doc_ref.get()
-                if updated_doc.exists:
-                    draft_data = updated_doc.to_dict()
-                    draft_data["id"] = doc.id
-                    draft_data["total_followups"] = total_followups
-                    draft_data["scheduled_followups"] = scheduled_followups
-                    draft_data["sent_followups"] = sent_followups
-                    draft_data["cancelled_followups"] = cancelled_followups
+                # Appeler directement l'endpoint GET /get-thread/<thread_id>
+                thread_id = draft_data.get("gmail_thread_id")
+                
+                try:
+                    id_token = get_id_token(GMAIL_NOTIFIER_URL)
+                    headers = {
+                        "Authorization": f"Bearer {id_token}",
+                        "Content-Type": "application/json"
+                    }
+                except Exception:
+                    headers = {"Content-Type": "application/json"}
+                
+                response = http_requests.get(
+                    f"{GMAIL_NOTIFIER_URL}/get-thread/{thread_id}",
+                    headers=headers,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("status") == "ok":
+                        thread_messages = result.get("messages", [])
+                        print(f"[INFO] Thread récupéré depuis Gmail: {len(thread_messages)} messages")
+                    else:
+                        print(f"[WARNING] Erreur dans la réponse: {result}")
+                else:
+                    print(f"[WARNING] Erreur HTTP {response.status_code} lors de la récupération du thread")
+                    
             except Exception as fetch_error:
-                print(f"[WARNING] Impossible de récupérer la réponse: {fetch_error}")
+                print(f"[WARNING] Impossible de récupérer le thread depuis Gmail: {fetch_error}")
         
         return render_template("sent_draft_detail.html", draft=draft_data, followups=followups, sent_followup_messages=sent_followup_messages, thread_messages=thread_messages, open_history=open_history)
     
@@ -1212,6 +1212,7 @@ def dashboard():
         total_opened = 0
         total_replied = 0
         total_bounced = 0
+        total_untracked = 0  # Mails sans pixel_id
         
         sends_by_date = defaultdict(int)
         opens_by_date = defaultdict(int)
@@ -1219,32 +1220,51 @@ def dashboard():
         
         response_times = []
         
+        # Taux de réponse par étape (followup_number)
+        response_by_step = defaultdict(lambda: {"sent": 0, "replied": 0})
+        # Taux d'ouverture par étape
+        open_by_step = defaultdict(lambda: {"sent": 0, "opened": 0})
+        # followup_number: 0 = premier mail, 1 = première relance, etc.
+        
         for doc in sent_drafts:
             data = doc.to_dict()
+            
+            # Comptabiliser par étape de followup
+            followup_number = data.get("followup_number", 0)
+            response_by_step[followup_number]["sent"] += 1
+            if data.get("has_reply"):
+                response_by_step[followup_number]["replied"] += 1
             
             # Vérifier les ouvertures depuis la collection des pixels
             pixel_id = data.get("pixel_id")
             open_count = 0
             first_opened_at = None
             
+            # Inclure uniquement les drafts avec pixel_id dans les stats d'ouverture
             if pixel_id:
+                open_by_step[followup_number]["sent"] += 1
+                
                 pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
                 if pixel_doc.exists:
                     pixel_data = pixel_doc.to_dict()
                     open_count = pixel_data.get("open_count", 0)
                     first_opened_at = pixel_data.get("first_opened_at")
-            
-            if open_count > 0:
-                total_opened += 1
                 
-                # Pour le graphique : utiliser first_opened_at, sinon sent_at comme fallback
-                open_date = first_opened_at if first_opened_at else data.get("sent_at")
-                if open_date:
-                    if hasattr(open_date, 'strftime'):
-                        date_key = open_date.strftime("%Y-%m-%d")
-                    else:
-                        date_key = str(open_date)[:10]
-                    opens_by_date[date_key] += 1
+                if open_count > 0:
+                    total_opened += 1
+                    open_by_step[followup_number]["opened"] += 1
+                    
+                    # Pour le graphique : utiliser first_opened_at, sinon sent_at comme fallback
+                    open_date = first_opened_at if first_opened_at else data.get("sent_at")
+                    if open_date:
+                        if hasattr(open_date, 'strftime'):
+                            date_key = open_date.strftime("%Y-%m-%d")
+                        else:
+                            date_key = str(open_date)[:10]
+                        opens_by_date[date_key] += 1
+            else:
+                # Compter les mails sans pixel_id (non trackés)
+                total_untracked += 1
                     
             if data.get("has_reply"):
                 total_replied += 1
@@ -1259,16 +1279,17 @@ def dashboard():
                     date_key = str(sent_at)[:10]
                 sends_by_date[date_key] += 1
             
-            reply_at = data.get("reply_received_at")
-            if reply_at and sent_at:
-                if hasattr(reply_at, 'strftime'):
-                    date_key = reply_at.strftime("%Y-%m-%d")
+            # Utiliser first_reply_at pour les statistiques de réponse
+            first_reply_at = data.get("first_reply_at")
+            if first_reply_at and sent_at:
+                if hasattr(first_reply_at, 'strftime'):
+                    date_key = first_reply_at.strftime("%Y-%m-%d")
                 else:
-                    date_key = str(reply_at)[:10]
+                    date_key = str(first_reply_at)[:10]
                 replies_by_date[date_key] += 1
                 
-                if hasattr(reply_at, 'timestamp') and hasattr(sent_at, 'timestamp'):
-                    diff = reply_at.timestamp() - sent_at.timestamp()
+                if hasattr(first_reply_at, 'timestamp') and hasattr(sent_at, 'timestamp'):
+                    diff = first_reply_at.timestamp() - sent_at.timestamp()
                     response_times.append(diff / 3600)
         
         open_rate = (total_opened / total_sent * 100) if total_sent > 0 else 0
@@ -1292,6 +1313,45 @@ def dashboard():
             "replies": [replies_by_date.get(d, 0) for d in dates]
         }
         
+        # Calculer les taux de réponse par étape
+        response_rates_by_step = []
+        step_labels = {
+            0: "Premier mail",
+            1: "1ère relance",
+            2: "2ème relance",
+            3: "3ème relance",
+            4: "4ème relance"
+        }
+        
+        for step in sorted(response_by_step.keys()):
+            sent = response_by_step[step]["sent"]
+            replied = response_by_step[step]["replied"]
+            rate = (replied / sent * 100) if sent > 0 else 0
+            
+            response_rates_by_step.append({
+                "step": step,
+                "label": step_labels.get(step, f"Relance {step}"),
+                "sent": sent,
+                "replied": replied,
+                "rate": round(rate, 1)
+            })
+        
+        # Calculer les taux d'ouverture par étape
+        open_rates_by_step = []
+        
+        for step in sorted(open_by_step.keys()):
+            sent = open_by_step[step]["sent"]
+            opened = open_by_step[step]["opened"]
+            rate = (opened / sent * 100) if sent > 0 else 0
+            
+            open_rates_by_step.append({
+                "step": step,
+                "label": step_labels.get(step, f"Relance {step}"),
+                "sent": sent,
+                "opened": opened,
+                "rate": round(rate, 1)
+            })
+        
         pending_count = len(list(db.collection(DRAFT_COLLECTION).where("status", "==", "pending").stream()))
         
         return render_template("dashboard.html",
@@ -1299,12 +1359,15 @@ def dashboard():
             total_opened=total_opened,
             total_replied=total_replied,
             total_bounced=total_bounced,
+            total_untracked=total_untracked,
             open_rate=open_rate,
             reply_rate=reply_rate,
             bounce_rate=bounce_rate,
             avg_response_time=avg_response_formatted,
             pending_count=pending_count,
-            chart_data=chart_data
+            chart_data=chart_data,
+            response_rates_by_step=response_rates_by_step,
+            open_rates_by_step=open_rates_by_step
         )
     
     except Exception as e:
@@ -1659,72 +1722,132 @@ def prospect_detail(draft_id: str):
         
         prospect["scheduled_followups"] = len([f for f in followups if f.get("status") == "scheduled"])
         
+        # Récupérer les messages du thread depuis Gmail si has_reply ou has_bounce
+        thread_messages = []
+        if prospect.get("gmail_thread_id") and (prospect.get("has_reply") or prospect.get("has_bounce")):
+            try:
+                thread_id = prospect.get("gmail_thread_id")
+                
+                try:
+                    id_token = get_id_token(GMAIL_NOTIFIER_URL)
+                    headers = {
+                        "Authorization": f"Bearer {id_token}",
+                        "Content-Type": "application/json"
+                    }
+                except Exception:
+                    headers = {"Content-Type": "application/json"}
+                
+                response = http_requests.get(
+                    f"{GMAIL_NOTIFIER_URL}/get-thread/{thread_id}",
+                    headers=headers,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("status") == "ok":
+                        thread_messages = result.get("messages", [])
+                        print(f"[INFO] Thread récupéré depuis Gmail pour prospect: {len(thread_messages)} messages")
+                    else:
+                        print(f"[WARNING] Erreur dans la réponse: {result}")
+                else:
+                    print(f"[WARNING] Erreur HTTP {response.status_code} lors de la récupération du thread")
+                    
+            except Exception as fetch_error:
+                print(f"[WARNING] Impossible de récupérer le thread depuis Gmail: {fetch_error}")
+        
         # Construire la timeline
         timeline_items = []
         
-        # Email initial
-        timeline_items.append({
-            "type": "sent",
-            "date": prospect.get("sent_at"),
-            "subject": prospect.get("subject"),
-            "body": prospect.get("body")
-        })
-        
-        # Bounce si applicable
-        if prospect.get("has_bounce"):
+        if thread_messages:
+            # Utiliser les messages du thread Gmail
+            for message in thread_messages:
+                timestamp = message.get("timestamp")
+                if timestamp:
+                    date = datetime.fromtimestamp(timestamp)
+                else:
+                    date = None
+                
+                timeline_items.append({
+                    "type": "sent" if message.get("is_from_me") else "reply",
+                    "date": date,
+                    "subject": message.get("subject"),
+                    "body": message.get("body"),
+                    "from": message.get("from")
+                })
+        else:
+            # Fallback: utiliser les anciennes données
+            # Email initial
             timeline_items.append({
-                "type": "bounce",
-                "date": prospect.get("bounce_detected_at") or prospect.get("sent_at"),
-                "subject": None,
-                "body": prospect.get("bounce_reason")
+                "type": "sent",
+                "date": prospect.get("sent_at"),
+                "subject": prospect.get("subject"),
+                "body": prospect.get("body")
             })
+            
+            # Bounce si applicable
+            if prospect.get("has_bounce"):
+                timeline_items.append({
+                    "type": "bounce",
+                    "date": prospect.get("bounce_detected_at") or prospect.get("sent_at"),
+                    "subject": None,
+                    "body": prospect.get("bounce_reason")
+                })
+            
+            # Réponses depuis les anciennes données
+            if prospect.get("has_reply"):
+                # Réponse directe à l'email initial
+                if prospect.get("reply_message") or prospect.get("reply_snippet"):
+                    timeline_items.append({
+                        "type": "reply",
+                        "date": prospect.get("reply_received_at") or prospect.get("first_reply_at"),
+                        "subject": prospect.get("reply_subject"),
+                        "body": prospect.get("reply_message") or prospect.get("reply_snippet", "")
+                    })
+                
+                # Réponse à un followup (stockée sur le draft original)
+                if prospect.get("followup_reply_message"):
+                    timeline_items.append({
+                        "type": "reply",
+                        "date": prospect.get("reply_received_at") or prospect.get("first_reply_at"),
+                        "subject": prospect.get("followup_reply_subject") or f"Réponse à la relance {prospect.get('followup_replied_number', '')}",
+                        "body": prospect.get("followup_reply_message")
+                    })
+            
+            # Followups envoyés
+            for followup in followups:
+                if followup.get("status") == "sent":
+                    timeline_items.append({
+                        "type": "followup",
+                        "date": followup.get("sent_at"),
+                        "subject": followup.get("subject"),
+                        "body": followup.get("body"),
+                        "followup_number": followup.get("followup_number")
+                    })
         
-        # Réponses
+        # Réponses (pour l'onglet séparé - données legacy)
         replies = []
-        if prospect.get("has_reply"):
+        if prospect.get("has_reply") and not thread_messages:
             # Réponse directe à l'email initial
             if prospect.get("reply_message") or prospect.get("reply_snippet"):
                 reply_item = {
-                    "received_at": prospect.get("reply_received_at"),
+                    "received_at": prospect.get("reply_received_at") or prospect.get("first_reply_at"),
                     "subject": prospect.get("reply_subject"),
                     "body": prospect.get("reply_message") or prospect.get("reply_snippet", ""),
                     "type": "direct"
                 }
                 replies.append(reply_item)
-                timeline_items.append({
-                    "type": "reply",
-                    "date": prospect.get("reply_received_at"),
-                    "subject": prospect.get("reply_subject"),
-                    "body": prospect.get("reply_message") or prospect.get("reply_snippet", "")
-                })
             
             # Réponse à un followup (stockée sur le draft original)
             if prospect.get("followup_reply_message"):
                 followup_reply_item = {
-                    "received_at": prospect.get("reply_received_at"),  # Utilise le même timestamp (mis à jour)
+                    "received_at": prospect.get("reply_received_at") or prospect.get("first_reply_at"),
                     "subject": prospect.get("followup_reply_subject"),
                     "body": prospect.get("followup_reply_message"),
                     "type": "followup_reply",
                     "followup_number": prospect.get("followup_replied_number", 0)
                 }
                 replies.append(followup_reply_item)
-                timeline_items.append({
-                    "type": "reply",
-                    "date": prospect.get("reply_received_at"),
-                    "subject": prospect.get("followup_reply_subject") or f"Réponse à la relance {prospect.get('followup_replied_number', '')}",
-                    "body": prospect.get("followup_reply_message")
-                })
-        
-        # Followups envoyés
-        for followup in followups:
-            if followup.get("status") == "sent":
-                timeline_items.append({
-                    "type": "followup",
-                    "date": followup.get("sent_at"),
-                    "subject": followup.get("subject"),
-                    "body": followup.get("body"),
-                    "followup_number": followup.get("followup_number")
-                })
         
         # Trier par date
         timeline_items.sort(key=lambda x: x.get("date") or datetime.min, reverse=False)
@@ -1738,7 +1861,8 @@ def prospect_detail(draft_id: str):
             followups=followups,
             replies=replies,
             timeline_items=timeline_items,
-            total_emails=total_emails
+            total_emails=total_emails,
+            thread_messages=thread_messages
         )
     
     except Exception as e:

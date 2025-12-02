@@ -219,6 +219,12 @@
         <div class="stat-value">{{ avg_response_time }}</div>
         <div class="stat-label">Temps moyen de réponse</div>
     </div>
+    
+    <div class="stat-card" style="border-top: 4px solid #95a5a6;">
+        <div class="stat-value">{{ total_untracked }}</div>
+        <div class="stat-label">Emails non trackés</div>
+        <div style="font-size: 12px; color: #7f8c8d; margin-top: 4px;">Sans pixel de suivi</div>
+    </div>
 </div>
 
 <!-- Graphiques -->
@@ -260,6 +266,48 @@
             <canvas id="ratesChart"></canvas>
         </div>
     </div>
+</div>
+
+<!-- Taux de réponse par étape -->
+<div class="chart-card" style="margin-bottom: 30px;">
+    <h3>📈 Taux de réponse par étape de relance</h3>
+    <div class="chart-container">
+        <canvas id="responseByStepChart"></canvas>
+    </div>
+    {% if response_rates_by_step %}
+    <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+        {% for step_data in response_rates_by_step %}
+        <div style="text-align: center; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">{{ step_data.label }}</div>
+            <div style="font-size: 24px; font-weight: 700; color: #3498db; margin-bottom: 4px;">{{ step_data.rate }}%</div>
+            <div style="font-size: 12px; color: #7f8c8d;">{{ step_data.replied }}/{{ step_data.sent }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="text-align: center; color: #7f8c8d; margin-top: 20px;">Aucune donnée disponible</p>
+    {% endif %}
+</div>
+
+<!-- Taux d'ouverture par étape -->
+<div class="chart-card" style="margin-bottom: 30px;">
+    <h3>👁️ Taux d'ouverture par étape de relance</h3>
+    <div class="chart-container">
+        <canvas id="openByStepChart"></canvas>
+    </div>
+    {% if open_rates_by_step %}
+    <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+        {% for step_data in open_rates_by_step %}
+        <div style="text-align: center; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">{{ step_data.label }}</div>
+            <div style="font-size: 24px; font-weight: 700; color: #f39c12; margin-bottom: 4px;">{{ step_data.rate }}%</div>
+            <div style="font-size: 12px; color: #7f8c8d;">{{ step_data.opened }}/{{ step_data.sent }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="text-align: center; color: #7f8c8d; margin-top: 20px;">Aucune donnée disponible</p>
+    {% endif %}
 </div>
 
 <!-- Actions rapides -->
@@ -412,5 +460,111 @@
             }
         }
     });
+    
+    // Graphique taux de réponse par étape
+    {% if response_rates_by_step %}
+    const responseByStepCtx = document.getElementById('responseByStepChart').getContext('2d');
+    const responseByStepData = {{ response_rates_by_step|tojson|safe }};
+    
+    new Chart(responseByStepCtx, {
+        type: 'bar',
+        data: {
+            labels: responseByStepData.map(d => d.label),
+            datasets: [
+                {
+                    label: 'Taux de réponse (%)',
+                    data: responseByStepData.map(d => d.rate),
+                    backgroundColor: 'rgba(52, 152, 219, 0.7)',
+                    borderColor: '#3498db',
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const stepData = responseByStepData[context.dataIndex];
+                            return [
+                                'Taux: ' + stepData.rate + '%',
+                                'Réponses: ' + stepData.replied + '/' + stepData.sent
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: Math.max(...responseByStepData.map(d => d.rate)) + 10,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+    
+    // Graphique taux d'ouverture par étape
+    {% if open_rates_by_step %}
+    const openByStepCtx = document.getElementById('openByStepChart').getContext('2d');
+    const openByStepData = {{ open_rates_by_step|tojson|safe }};
+    
+    new Chart(openByStepCtx, {
+        type: 'bar',
+        data: {
+            labels: openByStepData.map(d => d.label),
+            datasets: [
+                {
+                    label: 'Taux d\'ouverture (%)',
+                    data: openByStepData.map(d => d.rate),
+                    backgroundColor: 'rgba(243, 156, 18, 0.7)',
+                    borderColor: '#f39c12',
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const stepData = openByStepData[context.dataIndex];
+                            return [
+                                'Taux: ' + stepData.rate + '%',
+                                'Ouverts: ' + stepData.opened + '/' + stepData.sent
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: Math.max(...openByStepData.map(d => d.rate)) + 10,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
 </script>
 {% endblock %}

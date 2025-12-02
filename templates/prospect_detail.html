@@ -404,9 +404,17 @@
                 <div class="timeline-header">
                     <span class="timeline-title">
                         {% if item.type == 'sent' %}
-                            📧 Email initial envoyé
+                            {% if item.from %}
+                                📤 {{ item.from }}
+                            {% else %}
+                                📧 Email envoyé
+                            {% endif %}
                         {% elif item.type == 'reply' %}
-                            💬 Réponse reçue
+                            {% if item.from %}
+                                💬 {{ item.from }}
+                            {% else %}
+                                💬 Réponse reçue
+                            {% endif %}
                         {% elif item.type == 'followup' %}
                             🔄 Relance {{ item.followup_number }} envoyée
                         {% elif item.type == 'bounce' %}
@@ -414,7 +422,9 @@
                         {% endif %}
                     </span>
                     <span class="timeline-date">
-                        {{ item.date.strftime('%d/%m/%Y à %H:%M') if item.date is not string else item.date }}
+                        {% if item.date %}
+                            {{ item.date.strftime('%d/%m/%Y à %H:%M') if item.date is not string else item.date }}
+                        {% endif %}
                     </span>
                 </div>
                 
@@ -442,7 +452,35 @@
     
     <!-- Contenu Réponses -->
     <div id="replies" class="tab-content">
-        {% if replies %}
+        {% if thread_messages %}
+        <!-- Afficher la conversation complète depuis Gmail -->
+        <h4 style="margin-bottom: 15px;">💬 Conversation complète</h4>
+        <div class="timeline">
+            {% for message in thread_messages %}
+            <div class="timeline-item {% if message.is_from_me %}sent{% else %}reply{% endif %}">
+                <div class="timeline-header">
+                    <span class="timeline-title">
+                        {% if message.is_from_me %}
+                            📤 Vous
+                        {% else %}
+                            📨 {{ message.from }}
+                        {% endif %}
+                    </span>
+                    <span class="timeline-date">
+                        {{ message.date }}
+                    </span>
+                </div>
+                {% if message.subject %}
+                <div class="timeline-subject">{{ message.subject }}</div>
+                {% endif %}
+                <div class="timeline-body">
+                    {{ message.body|safe }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% elif replies %}
+        <!-- Fallback: anciennes données stockées -->
         <div class="timeline">
             {% for reply in replies %}
             <div class="timeline-item reply">
