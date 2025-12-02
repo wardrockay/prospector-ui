@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}{% if instruction %}Éditer{% else %}Créer{% endif %} Instruction - Prospector{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .form-group {
+        margin-bottom: 25px;
+    }
+    
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #2c3e50;
+    }
+    
+    .form-group .help-text {
+        font-size: 13px;
+        color: #7f8c8d;
+        margin-top: 5px;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 10px 15px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    }
+    
+    textarea.form-control {
+        font-family: 'Courier New', monospace;
+        resize: vertical;
+        min-height: 300px;
+    }
+    
+    select.form-control {
+        cursor: pointer;
+    }
+    
+    .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .checkbox-wrapper input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+    }
+    
+    .checkbox-wrapper label {
+        margin: 0;
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 2px solid #e0e0e0;
+    }
+    
+    .current-active-info {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        padding: 12px 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        color: #856404;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{% if instruction %}✏️ Éditer l'instruction{% else %}➕ Créer une instruction{% endif %}</h2>
+    
+    <div class="card" style="margin-top: 20px;">
+        <form method="POST">
+            <div class="form-group">
+                <label for="followup_number">Étape de prospection *</label>
+                <select name="followup_number" id="followup_number" class="form-control" {% if instruction %}disabled{% endif %} required>
+                    {% for num, label in step_labels.items() %}
+                    <option value="{{ num }}" {% if instruction and instruction.followup_number == num %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% if instruction %}
+                <input type="hidden" name="followup_number" value="{{ instruction.followup_number }}">
+                <p class="help-text">L'étape ne peut pas être modifiée après création</p>
+                {% else %}
+                <p class="help-text">Sélectionnez l'étape de la prospection pour cette instruction</p>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="version_name">Nom de la version *</label>
+                <input 
+                    type="text" 
+                    name="version_name" 
+                    id="version_name" 
+                    class="form-control" 
+                    placeholder="Ex: Version optimisée v2, Test A/B variant A, etc."
+                    value="{{ instruction.version_name if instruction else '' }}"
+                    required
+                >
+                <p class="help-text">Un nom descriptif pour identifier cette version</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="instruction_text">Instructions pour l'agent *</label>
+                <textarea 
+                    name="instruction_text" 
+                    id="instruction_text" 
+                    class="form-control" 
+                    placeholder="Écrivez ici les instructions détaillées pour l'agent d'écriture..."
+                    required
+                >{{ instruction.instruction_text if instruction else '' }}</textarea>
+                <p class="help-text">Ces instructions seront utilisées par l'agent pour générer les emails de cette étape</p>
+            </div>
+            
+            <div class="form-group">
+                <div class="checkbox-wrapper">
+                    <input 
+                        type="checkbox" 
+                        name="is_active" 
+                        id="is_active"
+                        {% if instruction and instruction.is_active %}checked{% endif %}
+                        {% if not instruction %}checked{% endif %}
+                    >
+                    <label for="is_active">Activer cette version (utilisée pour les prochains emails)</label>
+                </div>
+                <p class="help-text" style="margin-left: 30px;">
+                    ⚠️ Si cochée, cette version deviendra active et désactivera automatiquement les autres versions de la même étape
+                </p>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    {% if instruction %}💾 Sauvegarder{% else %}➕ Créer{% endif %}
+                </button>
+                <a href="{{ url_for('agent_instructions.instructions_list') }}" class="btn btn-secondary">
+                    ✖ Annuler
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Auto-resize textarea
+const textarea = document.getElementById('instruction_text');
+if (textarea) {
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+    // Trigger on load
+    textarea.dispatchEvent(new Event('input'));
+}
+</script>
+{% endblock %}

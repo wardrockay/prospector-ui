@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Instructions Agent - Prospector{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+    
+    .step-section {
+        margin-bottom: 40px;
+    }
+    
+    .step-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px 8px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .step-header h3 {
+        margin: 0;
+        font-size: 20px;
+    }
+    
+    .version-list {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+    }
+    
+    .version-item {
+        padding: 20px;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        transition: background-color 0.2s;
+    }
+    
+    .version-item:last-child {
+        border-bottom: none;
+    }
+    
+    .version-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .version-item.active {
+        background-color: #e8f5e9;
+        border-left: 4px solid #27ae60;
+    }
+    
+    .version-info {
+        flex: 1;
+    }
+    
+    .version-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 10px;
+    }
+    
+    .version-name {
+        font-size: 18px;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .version-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .badge-active {
+        background: #27ae60;
+        color: white;
+    }
+    
+    .badge-inactive {
+        background: #95a5a6;
+        color: white;
+    }
+    
+    .version-meta {
+        font-size: 13px;
+        color: #7f8c8d;
+        margin-bottom: 10px;
+    }
+    
+    .version-preview {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        color: #34495e;
+        max-height: 200px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    
+    .version-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-left: 20px;
+    }
+    
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+    
+    .empty-state {
+        padding: 40px;
+        text-align: center;
+        color: #7f8c8d;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+    }
+    
+    .empty-state i {
+        font-size: 48px;
+        margin-bottom: 15px;
+        opacity: 0.3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>🤖 Instructions Agent d'Écriture</h2>
+    <a href="{{ url_for('agent_instructions.create_instruction') }}" class="btn btn-primary">
+        ➕ Nouvelle instruction
+    </a>
+</div>
+
+{% if instructions_by_step %}
+    {% for step_num in [0, 1, 2, 3, 4] %}
+        {% if step_num in instructions_by_step %}
+        <div class="step-section">
+            <div class="step-header">
+                <h3>{{ instructions_by_step[step_num].label }}</h3>
+                <span style="opacity: 0.8; font-size: 14px;">
+                    {{ instructions_by_step[step_num].versions|length }} version(s)
+                </span>
+            </div>
+            
+            <div class="version-list">
+                {% for instruction in instructions_by_step[step_num].versions %}
+                <div class="version-item {% if instruction.is_active %}active{% endif %}">
+                    <div class="version-info">
+                        <div class="version-header">
+                            <span class="version-name">{{ instruction.version_name }}</span>
+                            <span class="version-badge {% if instruction.is_active %}badge-active{% else %}badge-inactive{% endif %}">
+                                {% if instruction.is_active %}✓ Active{% else %}Inactive{% endif %}
+                            </span>
+                        </div>
+                        
+                        <div class="version-meta">
+                            Créée le {{ instruction.created_at.strftime('%d/%m/%Y à %H:%M') if instruction.created_at is not string else instruction.created_at }}
+                            {% if instruction.updated_at and instruction.updated_at != instruction.created_at %}
+                                • Modifiée le {{ instruction.updated_at.strftime('%d/%m/%Y à %H:%M') if instruction.updated_at is not string else instruction.updated_at }}
+                            {% endif %}
+                        </div>
+                        
+                        <div class="version-preview">{{ instruction.instruction_text }}</div>
+                    </div>
+                    
+                    <div class="version-actions">
+                        <a href="{{ url_for('agent_instructions.edit_instruction', instruction_id=instruction.id) }}" class="btn btn-sm btn-secondary">
+                            ✏️ Éditer
+                        </a>
+                        
+                        {% if not instruction.is_active %}
+                        <form method="POST" action="{{ url_for('agent_instructions.activate_instruction', instruction_id=instruction.id) }}" style="margin: 0;">
+                            <button type="submit" class="btn btn-sm btn-success" style="width: 100%;">
+                                ✓ Activer
+                            </button>
+                        </form>
+                        {% endif %}
+                        
+                        <form method="POST" action="{{ url_for('agent_instructions.delete_instruction', instruction_id=instruction.id) }}" onsubmit="return confirm('Supprimer cette instruction ?');" style="margin: 0;">
+                            <button type="submit" class="btn btn-sm btn-danger" style="width: 100%;">
+                                🗑️ Supprimer
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <div class="empty-state">
+            <i>📝</i>
+            <h3>Aucune instruction configurée</h3>
+            <p>Créez votre première instruction pour commencer</p>
+            <a href="{{ url_for('agent_instructions.create_instruction') }}" class="btn btn-primary" style="margin-top: 15px;">
+                ➕ Créer une instruction
+            </a>
+        </div>
+    </div>
+{% endif %}
+
+<div style="margin-top: 30px;">
+    <a href="{{ url_for('main.index') }}" class="btn btn-secondary">← Retour</a>
+</div>
+{% endblock %}

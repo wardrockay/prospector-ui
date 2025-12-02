@@ -14,6 +14,7 @@ from markupsafe import Markup
 import markdown as md
 
 from src.blueprints import (
+    agent_instructions_bp,
     api_bp,
     dashboard_bp,
     followups_bp,
@@ -66,6 +67,7 @@ def create_app() -> Flask:
     app.register_blueprint(kanban_bp)
     app.register_blueprint(followups_bp)
     app.register_blueprint(prospects_bp)
+    app.register_blueprint(agent_instructions_bp)
     
     # Error handlers
     @app.errorhandler(404)

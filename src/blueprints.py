@@ -28,6 +28,7 @@ DRAFT_COLLECTION = os.environ.get("DRAFT_COLLECTION", "email_drafts")
 FOLLOWUP_COLLECTION = os.environ.get("FOLLOWUP_COLLECTION", "email_followups")
 PIXEL_COLLECTION = os.environ.get("PIXEL_COLLECTION", "email_opens")
 GENERATION_COLLECTION = os.environ.get("GENERATION_COLLECTION", "mail_writer_operations")
+AGENT_INSTRUCTIONS_COLLECTION = os.environ.get("AGENT_INSTRUCTIONS_COLLECTION", "agent_instructions")
 SEND_MAIL_SERVICE_URL = os.environ.get("SEND_MAIL_SERVICE_URL", "").rstrip("/")
 AUTO_FOLLOWUP_URL = os.environ.get("AUTO_FOLLOWUP_URL", "").rstrip("/")
 ODOO_DB_URL = os.environ.get("ODOO_DB_URL", "").rstrip("/")
@@ -1429,8 +1430,22 @@ followups_bp = Blueprint("followups", __name__, url_prefix="/followups")
 def timeline():
     """Show followups timeline view."""
     try:
-        # Récupérer tous les followups triés par date planifiée (plus proche en premier)
-        followups_ref = db.collection(FOLLOWUP_COLLECTION).order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(200)
+        # Filtrer par statut si demandé
+        filter_status = request.args.get("status", "all")
+        
+        # Si pas de filtre spécifique, on exclut les annulées
+        if filter_status == "all":
+            # Récupérer seulement les followups scheduled et sent
+            followups_scheduled = db.collection(FOLLOWUP_COLLECTION).where("status", "==", "scheduled").order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(100).stream()
+            followups_sent = db.collection(FOLLOWUP_COLLECTION).where("status", "==", "sent").order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(100).stream()
+            
+            all_docs = list(followups_scheduled) + list(followups_sent)
+        else:
+            # Récupérer tous les followups pour calculer les stats
+            all_docs = db.collection(FOLLOWUP_COLLECTION).where("status", "==", filter_status).order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(200).stream()
+        
+        # Récupérer TOUS les followups pour les stats (limité à 500)
+        all_followups_for_stats = list(db.collection(FOLLOWUP_COLLECTION).limit(500).stream())
         
         followups = []
         draft_cache = {}
@@ -1438,7 +1453,7 @@ def timeline():
         # Date d'aujourd'hui pour le filtre
         today = datetime.utcnow().date()
         
-        for doc in followups_ref.stream():
+        for doc in all_docs:
             followup_data = doc.to_dict()
             followup_data["id"] = doc.id
             
@@ -1457,20 +1472,23 @@ def timeline():
             
             followups.append(followup_data)
         
-        # Statistiques par statut
+        # Trier par date
+        followups.sort(key=lambda f: f.get("scheduled_for") or datetime.min)
+        
+        # Statistiques par statut (calculées sur TOUS les followups)
         stats = {
-            "total": len(followups),
-            "scheduled": len([f for f in followups if f.get("status") == "scheduled"]),
-            "sent": len([f for f in followups if f.get("status") == "sent"]),
-            "cancelled": len([f for f in followups if f.get("status") == "cancelled"])
+            "total": len([f for f in all_followups_for_stats if f.to_dict().get("status") in ["scheduled", "sent"]]),
+            "scheduled": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "scheduled"]),
+            "sent": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "sent"]),
+            "cancelled": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "cancelled"])
         }
         
-        # Statistiques par jours (J+3, J+7, J+10, J+180)
+        # Statistiques par jours (J+3, J+7, J+10, J+180) - uniquement non-annulées
         days_stats = {
-            3: len([f for f in followups if f.get("days_after_initial") == 3]),
-            7: len([f for f in followups if f.get("days_after_initial") == 7]),
-            10: len([f for f in followups if f.get("days_after_initial") == 10]),
-            180: len([f for f in followups if f.get("days_after_initial") == 180])
+            3: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 3 and f.to_dict().get("status") != "cancelled"]),
+            7: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 7 and f.to_dict().get("status") != "cancelled"]),
+            10: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 10 and f.to_dict().get("status") != "cancelled"]),
+            180: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 180 and f.to_dict().get("status") != "cancelled"])
         }
         
         # Compter les relances prévues aujourd'hui (scheduled uniquement)
@@ -1484,11 +1502,6 @@ def timeline():
             return False
         
         today_count = len([f for f in followups if is_today(f)])
-        
-        # Filtrer par statut si demandé
-        filter_status = request.args.get("status", "all")
-        if filter_status != "all":
-            followups = [f for f in followups if f.get("status") == filter_status]
         
         # Filtrer par jours si demandé
         filter_days = request.args.get("days")
@@ -1868,3 +1881,218 @@ def prospect_detail(draft_id: str):
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for("prospects.prospects_list"))
+
+
+# ============================================================================
+# Agent Instructions Blueprint
+# ============================================================================
+
+agent_instructions_bp = Blueprint("agent_instructions", __name__, url_prefix="/agent-instructions")
+
+
+@agent_instructions_bp.route("/")
+def instructions_list():
+    """Show all agent instructions grouped by followup_number."""
+    try:
+        # Récupérer toutes les instructions
+        instructions_ref = db.collection(AGENT_INSTRUCTIONS_COLLECTION).order_by("followup_number").order_by("created_at", direction=firestore.Query.DESCENDING)
+        
+        # Grouper par followup_number
+        instructions_by_step = {}
+        step_labels = {
+            0: "Mail initial",
+            1: "1ère relance",
+            2: "2ème relance",
+            3: "3ème relance",
+            4: "4ème relance"
+        }
+        
+        for doc in instructions_ref.stream():
+            instruction_data = doc.to_dict()
+            instruction_data["id"] = doc.id
+            
+            followup_number = instruction_data.get("followup_number", 0)
+            
+            if followup_number not in instructions_by_step:
+                instructions_by_step[followup_number] = {
+                    "label": step_labels.get(followup_number, f"Relance {followup_number}"),
+                    "versions": []
+                }
+            
+            instructions_by_step[followup_number]["versions"].append(instruction_data)
+        
+        return render_template("agent_instructions.html", instructions_by_step=instructions_by_step, step_labels=step_labels)
+    
+    except Exception as e:
+        flash(f"Erreur lors du chargement des instructions: {str(e)}", "error")
+        return redirect(url_for("main.index"))
+
+
+@agent_instructions_bp.route("/create", methods=["GET", "POST"])
+def create_instruction():
+    """Create a new agent instruction."""
+    if request.method == "POST":
+        try:
+            followup_number = int(request.form.get("followup_number", 0))
+            version_name = request.form.get("version_name", "").strip()
+            instruction_text = request.form.get("instruction_text", "").strip()
+            is_active = request.form.get("is_active") == "on"
+            
+            if not version_name or not instruction_text:
+                flash("Le nom de version et les instructions sont obligatoires", "error")
+                return redirect(url_for("agent_instructions.create_instruction"))
+            
+            # Si is_active, désactiver les autres versions pour cette étape
+            if is_active:
+                existing_instructions = db.collection(AGENT_INSTRUCTIONS_COLLECTION).where("followup_number", "==", followup_number).where("is_active", "==", True).stream()
+                for existing_doc in existing_instructions:
+                    db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(existing_doc.id).update({"is_active": False})
+            
+            # Créer la nouvelle instruction
+            new_instruction = {
+                "followup_number": followup_number,
+                "version_name": version_name,
+                "instruction_text": instruction_text,
+                "is_active": is_active,
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "updated_at": firestore.SERVER_TIMESTAMP
+            }
+            
+            db.collection(AGENT_INSTRUCTIONS_COLLECTION).add(new_instruction)
+            
+            flash(f"Instruction créée avec succès pour '{version_name}'", "success")
+            return redirect(url_for("agent_instructions.instructions_list"))
+        
+        except Exception as e:
+            flash(f"Erreur lors de la création: {str(e)}", "error")
+            return redirect(url_for("agent_instructions.create_instruction"))
+    
+    step_labels = {
+        0: "Mail initial",
+        1: "1ère relance",
+        2: "2ème relance",
+        3: "3ème relance",
+        4: "4ème relance"
+    }
+    
+    return render_template("agent_instruction_form.html", instruction=None, step_labels=step_labels)
+
+
+@agent_instructions_bp.route("/edit/<instruction_id>", methods=["GET", "POST"])
+def edit_instruction(instruction_id: str):
+    """Edit an existing agent instruction."""
+    if request.method == "POST":
+        try:
+            version_name = request.form.get("version_name", "").strip()
+            instruction_text = request.form.get("instruction_text", "").strip()
+            is_active = request.form.get("is_active") == "on"
+            
+            if not version_name or not instruction_text:
+                flash("Le nom de version et les instructions sont obligatoires", "error")
+                return redirect(url_for("agent_instructions.edit_instruction", instruction_id=instruction_id))
+            
+            # Récupérer l'instruction actuelle
+            instruction_ref = db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(instruction_id)
+            instruction_doc = instruction_ref.get()
+            
+            if not instruction_doc.exists:
+                flash("Instruction non trouvée", "error")
+                return redirect(url_for("agent_instructions.instructions_list"))
+            
+            instruction_data = instruction_doc.to_dict()
+            followup_number = instruction_data.get("followup_number", 0)
+            
+            # Si is_active, désactiver les autres versions pour cette étape
+            if is_active:
+                existing_instructions = db.collection(AGENT_INSTRUCTIONS_COLLECTION).where("followup_number", "==", followup_number).where("is_active", "==", True).stream()
+                for existing_doc in existing_instructions:
+                    if existing_doc.id != instruction_id:
+                        db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(existing_doc.id).update({"is_active": False})
+            
+            # Mettre à jour l'instruction
+            instruction_ref.update({
+                "version_name": version_name,
+                "instruction_text": instruction_text,
+                "is_active": is_active,
+                "updated_at": firestore.SERVER_TIMESTAMP
+            })
+            
+            flash(f"Instruction '{version_name}' mise à jour avec succès", "success")
+            return redirect(url_for("agent_instructions.instructions_list"))
+        
+        except Exception as e:
+            flash(f"Erreur lors de la mise à jour: {str(e)}", "error")
+            return redirect(url_for("agent_instructions.edit_instruction", instruction_id=instruction_id))
+    
+    # GET request - afficher le formulaire
+    try:
+        instruction_ref = db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(instruction_id)
+        instruction_doc = instruction_ref.get()
+        
+        if not instruction_doc.exists:
+            flash("Instruction non trouvée", "error")
+            return redirect(url_for("agent_instructions.instructions_list"))
+        
+        instruction = instruction_doc.to_dict()
+        instruction["id"] = instruction_doc.id
+        
+        step_labels = {
+            0: "Mail initial",
+            1: "1ère relance",
+            2: "2ème relance",
+            3: "3ème relance",
+            4: "4ème relance"
+        }
+        
+        return render_template("agent_instruction_form.html", instruction=instruction, step_labels=step_labels)
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("agent_instructions.instructions_list"))
+
+
+@agent_instructions_bp.route("/activate/<instruction_id>", methods=["POST"])
+def activate_instruction(instruction_id: str):
+    """Set an instruction as active for its step."""
+    try:
+        # Récupérer l'instruction
+        instruction_ref = db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(instruction_id)
+        instruction_doc = instruction_ref.get()
+        
+        if not instruction_doc.exists:
+            flash("Instruction non trouvée", "error")
+            return redirect(url_for("agent_instructions.instructions_list"))
+        
+        instruction_data = instruction_doc.to_dict()
+        followup_number = instruction_data.get("followup_number", 0)
+        
+        # Désactiver toutes les autres instructions pour cette étape
+        existing_instructions = db.collection(AGENT_INSTRUCTIONS_COLLECTION).where("followup_number", "==", followup_number).where("is_active", "==", True).stream()
+        for existing_doc in existing_instructions:
+            db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(existing_doc.id).update({"is_active": False})
+        
+        # Activer cette instruction
+        instruction_ref.update({
+            "is_active": True,
+            "updated_at": datetime.now(firestore.SERVER_TIMESTAMP)
+        })
+        
+        flash("Instruction activée avec succès", "success")
+        return redirect(url_for("agent_instructions.instructions_list"))
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for("agent_instructions.instructions_list"))
+
+
+@agent_instructions_bp.route("/delete/<instruction_id>", methods=["POST"])
+def delete_instruction(instruction_id: str):
+    """Delete an agent instruction."""
+    try:
+        db.collection(AGENT_INSTRUCTIONS_COLLECTION).document(instruction_id).delete()
+        flash("Instruction supprimée avec succès", "success")
+        return redirect(url_for("agent_instructions.instructions_list"))
+    
+    except Exception as e:
+        flash(f"Erreur lors de la suppression: {str(e)}", "error")
+        return redirect(url_for("agent_instructions.instructions_list"))
