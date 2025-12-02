@@ -830,7 +830,13 @@ def fetch_thread_messages_from_gmail(draft_id: str) -> dict:
 def history_list():
     """Show sent email history."""
     try:
+        import base64
         from datetime import timedelta
+        
+        # Pagination parameters
+        page_size = 50
+        cursor = request.args.get("cursor")
+        page_num = int(request.args.get("page", "1"))
         
         # Récupérer le filtre de date
         date_filter = request.args.get("date", "all")
@@ -861,19 +867,55 @@ def history_list():
                 date_start = None
                 date_end = None
         
-        # Construire la requête
+        # Construire la requête de base
         if date_start and date_end:
             # Requête avec filtres de date
-            sent_drafts_ref = (
+            base_query = (
                 db.collection(DRAFT_COLLECTION)
                 .where("status", "==", "sent")
                 .where("sent_at", ">=", date_start)
                 .where("sent_at", "<", date_end)
-                .order_by("sent_at", direction=firestore.Query.DESCENDING)
-                .limit(200)
             )
+            query = base_query.order_by("sent_at", direction=firestore.Query.DESCENDING)
         else:
-            sent_drafts_ref = db.collection(DRAFT_COLLECTION).where("status", "==", "sent").order_by("sent_at", direction=firestore.Query.DESCENDING).limit(50)
+            base_query = (
+                db.collection(DRAFT_COLLECTION)
+                .where("status", "==", "sent")
+            )
+            query = base_query.order_by("sent_at", direction=firestore.Query.DESCENDING)
+        
+        # Compter le total (pour afficher le nombre de pages)
+        import math
+        
+        # Utiliser l'agrégation Firestore pour compter sans télécharger les documents
+        agg_result = base_query.count().get()
+        total_count = agg_result[0][0].value
+        total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
+        
+        # Appliquer le curseur si présent
+        if cursor:
+            try:
+                # Décoder le curseur (timestamp ISO format)
+                cursor_data = base64.b64decode(cursor).decode()
+                cursor_timestamp = datetime.fromisoformat(cursor_data)
+                
+                # Récupérer le document curseur pour start_after
+                cursor_doc_query = (
+                    db.collection(DRAFT_COLLECTION)
+                    .where("status", "==", "sent")
+                    .where("sent_at", "==", cursor_timestamp)
+                    .limit(1)
+                )
+                cursor_docs = list(cursor_doc_query.stream())
+                if cursor_docs:
+                    query = query.start_after(cursor_docs[0])
+            except Exception as e:
+                logger.warning(f"Invalid cursor: {e}")
+                # Continue sans curseur si invalide
+        
+        # Limiter les résultats
+        query = query.limit(page_size)
+        docs = list(query.stream())
         
         sent_drafts = []
         
@@ -882,7 +924,7 @@ def history_list():
         total_bounced = 0
         total_replied = 0
         
-        for doc in sent_drafts_ref.stream():
+        for doc in docs:
             draft_data = doc.to_dict()
             draft_data["id"] = doc.id
             
@@ -915,6 +957,28 @@ def history_list():
             
             sent_drafts.append(draft_data)
         
+        # Créer le curseur pour la page suivante
+        next_cursor = None
+        prev_cursor = None
+        
+        if len(docs) == page_size and page_num < total_pages:
+            # Il y a potentiellement une page suivante
+            last_doc = docs[-1]
+            last_sent_at = last_doc.to_dict().get("sent_at")
+            if last_sent_at:
+                next_cursor = base64.b64encode(
+                    last_sent_at.isoformat().encode()
+                ).decode()
+        
+        # Pour la page précédente, on stocke le premier curseur
+        if cursor and docs:
+            first_doc = docs[0]
+            first_sent_at = first_doc.to_dict().get("sent_at")
+            if first_sent_at:
+                prev_cursor = base64.b64encode(
+                    first_sent_at.isoformat().encode()
+                ).decode()
+        
         open_rate = (total_opened / total_sent * 100) if total_sent > 0 else 0
         bounce_rate = (total_bounced / total_sent * 100) if total_sent > 0 else 0
         reply_rate = (total_replied / total_sent * 100) if total_sent > 0 else 0
@@ -937,7 +1001,21 @@ def history_list():
             draft_data["id"] = doc.id
             rejected_drafts.append(draft_data)
         
-        return render_template("history.html", sent_drafts=sent_drafts, rejected_drafts=rejected_drafts, stats=stats, date_filter=date_filter, custom_date=custom_date)
+        return render_template(
+            "history.html",
+            sent_drafts=sent_drafts,
+            rejected_drafts=rejected_drafts,
+            stats=stats,
+            date_filter=date_filter,
+            custom_date=custom_date,
+            next_cursor=next_cursor,
+            prev_cursor=prev_cursor,
+            current_cursor=cursor,
+            page_size=page_size,
+            current_page=page_num,
+            total_pages=total_pages,
+            total_count=total_count
+        )
     
     except Exception as e:
         flash(f"Erreur lors de la récupération de l'historique: {str(e)}", "error")
