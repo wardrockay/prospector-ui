@@ -516,7 +516,7 @@
                             {% else %}
                                 Relance #{{ followup.id[:8] }}
                             {% endif %}
-                            <span class="days-badge">J+{{ followup.days_after_initial or '?' }}</span>
+                            <span class="days-badge">J+{{ followup.business_days_after or followup.days_after_initial or '?' }}</span>
                         </div>
                         <div class="card-recipient">
                             📧 {{ followup.to or (followup.draft.to if followup.draft else 'N/A') }}

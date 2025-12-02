@@ -522,8 +522,8 @@
                 <div class="followup-info">
                     <div class="followup-title">
                         Relance {{ followup.followup_number or loop.index }}
-                        {% if followup.days_after_initial %}
-                            (J+{{ followup.days_after_initial }})
+                        {% if followup.business_days_after or followup.days_after_initial %}
+                            (J+{{ followup.business_days_after or followup.days_after_initial }})
                         {% endif %}
                     </div>
                     <div class="followup-date">

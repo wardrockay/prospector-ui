@@ -979,7 +979,7 @@ def sent_draft_detail(draft_id: str):
                     open_data["id"] = open_doc.id
                     open_history.append(open_data)
         
-        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id).order_by("days_after_initial")
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id).order_by("business_days_after")
         followups = []
         sent_followup_messages = []
         total_followups = 0
@@ -1487,10 +1487,10 @@ def timeline():
         
         # Statistiques par jours (J+3, J+7, J+10, J+180) - uniquement scheduled (non envoyées)
         days_stats = {
-            3: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 3 and f.to_dict().get("status") == "scheduled"]),
-            7: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 7 and f.to_dict().get("status") == "scheduled"]),
-            10: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 10 and f.to_dict().get("status") == "scheduled"]),
-            180: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 180 and f.to_dict().get("status") == "scheduled"])
+            3: len([f for f in all_followups_for_stats if (f.to_dict().get("business_days_after") or f.to_dict().get("days_after_initial")) == 3 and f.to_dict().get("status") == "scheduled"]),
+            7: len([f for f in all_followups_for_stats if (f.to_dict().get("business_days_after") or f.to_dict().get("days_after_initial")) == 7 and f.to_dict().get("status") == "scheduled"]),
+            10: len([f for f in all_followups_for_stats if (f.to_dict().get("business_days_after") or f.to_dict().get("days_after_initial")) == 10 and f.to_dict().get("status") == "scheduled"]),
+            180: len([f for f in all_followups_for_stats if (f.to_dict().get("business_days_after") or f.to_dict().get("days_after_initial")) == 180 and f.to_dict().get("status") == "scheduled"])
         }
         
         # Compter les relances prévues aujourd'hui (scheduled uniquement)
@@ -1510,7 +1510,7 @@ def timeline():
         if filter_days and filter_days.isdigit():
             filter_days = int(filter_days)
             # Filtrer par jours ET exclure les envoyées
-            followups = [f for f in followups if f.get("days_after_initial") == filter_days and f.get("status") != "sent"]
+            followups = [f for f in followups if (f.get("business_days_after") or f.get("days_after_initial")) == filter_days and f.get("status") != "sent"]
         else:
             filter_days = None
         
@@ -1793,7 +1793,7 @@ def prospect_detail(draft_id: str):
                 prospect["first_opened_at"] = pixel_data.get("first_opened_at")
         
         # Récupérer les followups
-        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", draft_id).order_by("days_after_initial")
+        followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", draft_id).order_by("business_days_after")
         followups = []
         for followup_doc in followups_ref.stream():
             followup_data = followup_doc.to_dict()

@@ -529,7 +529,7 @@
                     {% for followup in followups %}
                     <li class="followup-item">
                         <div>
-                            <strong>Relance à J+{{ followup.days_after_initial }}</strong>
+                            <strong>Relance à J+{{ followup.business_days_after or followup.days_after_initial }}</strong>
                             <br>
                             <small style="color: #7f8c8d;">
                                 Prévue pour: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
@@ -653,7 +653,7 @@
                         {% for followup_msg in sent_followup_messages %}
                         <div class="message followup">
                             <div class="message-header">
-                                <span class="message-type followup">Relance J+{{ followup_msg.days_after_initial }}</span>
+                                <span class="message-type followup">Relance J+{{ followup_msg.business_days_after or followup_msg.days_after_initial }}</span>
                                 <span class="message-date">
                                     {% if followup_msg.sent_at %}
                                         {{ followup_msg.sent_at.strftime('%d/%m/%Y %H:%M') if followup_msg.sent_at is not string else followup_msg.sent_at }}
