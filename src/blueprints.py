@@ -1435,11 +1435,12 @@ def timeline():
         
         # Si pas de filtre spécifique, on exclut les annulées
         if filter_status == "all":
-            # Récupérer seulement les followups scheduled et sent
+            # Récupérer seulement les followups scheduled, sent et failed
             followups_scheduled = db.collection(FOLLOWUP_COLLECTION).where("status", "==", "scheduled").order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(100).stream()
             followups_sent = db.collection(FOLLOWUP_COLLECTION).where("status", "==", "sent").order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(100).stream()
+            followups_failed = db.collection(FOLLOWUP_COLLECTION).where("status", "==", "failed").order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(100).stream()
             
-            all_docs = list(followups_scheduled) + list(followups_sent)
+            all_docs = list(followups_scheduled) + list(followups_sent) + list(followups_failed)
         else:
             # Récupérer tous les followups pour calculer les stats
             all_docs = db.collection(FOLLOWUP_COLLECTION).where("status", "==", filter_status).order_by("scheduled_for", direction=firestore.Query.ASCENDING).limit(200).stream()
@@ -1477,18 +1478,19 @@ def timeline():
         
         # Statistiques par statut (calculées sur TOUS les followups)
         stats = {
-            "total": len([f for f in all_followups_for_stats if f.to_dict().get("status") in ["scheduled", "sent"]]),
+            "total": len([f for f in all_followups_for_stats if f.to_dict().get("status") in ["scheduled", "sent", "failed"]]),
             "scheduled": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "scheduled"]),
             "sent": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "sent"]),
+            "failed": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "failed"]),
             "cancelled": len([f for f in all_followups_for_stats if f.to_dict().get("status") == "cancelled"])
         }
         
-        # Statistiques par jours (J+3, J+7, J+10, J+180) - uniquement non-annulées
+        # Statistiques par jours (J+3, J+7, J+10, J+180) - uniquement scheduled (non envoyées)
         days_stats = {
-            3: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 3 and f.to_dict().get("status") != "cancelled"]),
-            7: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 7 and f.to_dict().get("status") != "cancelled"]),
-            10: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 10 and f.to_dict().get("status") != "cancelled"]),
-            180: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 180 and f.to_dict().get("status") != "cancelled"])
+            3: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 3 and f.to_dict().get("status") == "scheduled"]),
+            7: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 7 and f.to_dict().get("status") == "scheduled"]),
+            10: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 10 and f.to_dict().get("status") == "scheduled"]),
+            180: len([f for f in all_followups_for_stats if f.to_dict().get("days_after_initial") == 180 and f.to_dict().get("status") == "scheduled"])
         }
         
         # Compter les relances prévues aujourd'hui (scheduled uniquement)
@@ -1507,7 +1509,8 @@ def timeline():
         filter_days = request.args.get("days")
         if filter_days and filter_days.isdigit():
             filter_days = int(filter_days)
-            followups = [f for f in followups if f.get("days_after_initial") == filter_days]
+            # Filtrer par jours ET exclure les envoyées
+            followups = [f for f in followups if f.get("days_after_initial") == filter_days and f.get("status") != "sent"]
         else:
             filter_days = None
         
@@ -1555,6 +1558,70 @@ def cancel_followup(followup_id: str):
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(request.form.get("next") or url_for("followups.timeline"))
+
+
+@followups_bp.route("/retry/<followup_id>", methods=["POST"])
+def retry_followup(followup_id: str):
+    """Retry a failed followup by changing status from failed to scheduled."""
+    try:
+        next_url = request.form.get("next") or url_for("followups.timeline")
+        
+        doc_ref = db.collection(FOLLOWUP_COLLECTION).document(followup_id)
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            flash("Relance non trouvée", "error")
+            return redirect(next_url)
+        
+        followup_data = doc.to_dict()
+        
+        if followup_data.get("status") != "failed":
+            flash("Cette relance n'est pas en échec", "warning")
+            return redirect(next_url)
+        
+        doc_ref.update({
+            "status": "scheduled",
+            "error_message": None,
+            "retry_at": datetime.utcnow(),
+            "retry_count": followup_data.get("retry_count", 0) + 1
+        })
+        
+        flash("Relance replanifiée avec succès", "success")
+        return redirect(next_url)
+    
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(request.form.get("next") or url_for("followups.timeline"))
+
+
+@followups_bp.route("/retry-all", methods=["POST"])
+def retry_all_failed():
+    """Retry all failed followups by changing their status to scheduled."""
+    try:
+        # Récupérer tous les followups échoués
+        failed_followups = db.collection(FOLLOWUP_COLLECTION).where("status", "==", "failed").stream()
+        
+        count = 0
+        for doc in failed_followups:
+            followup_data = doc.to_dict()
+            doc.reference.update({
+                "status": "scheduled",
+                "error_message": None,
+                "retry_at": datetime.utcnow(),
+                "retry_count": followup_data.get("retry_count", 0) + 1
+            })
+            count += 1
+        
+        if count == 0:
+            flash("Aucune relance échouée à réessayer", "info")
+        else:
+            flash(f"{count} relance(s) replanifiée(s) avec succès", "success")
+        
+        return redirect(url_for("followups.timeline"))
+    
+    except Exception as e:
+        flash(f"Erreur lors de la replanification: {str(e)}", "error")
+        return redirect(url_for("followups.timeline"))
 
 
 @followups_bp.route("/cancel-all/<draft_id>", methods=["POST"])

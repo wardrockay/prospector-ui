@@ -41,6 +41,7 @@
     
     .stat-item.scheduled .number { color: #f39c12; }
     .stat-item.sent .number { color: #27ae60; }
+    .stat-item.failed .number { color: #e74c3c; }
     .stat-item.cancelled .number { color: #95a5a6; }
     
     .filter-tabs {
@@ -149,6 +150,11 @@
         color: white;
     }
     
+    .timeline-marker.failed {
+        background: #e74c3c;
+        color: white;
+    }
+    
     .timeline-marker.cancelled {
         background: #95a5a6;
         color: white;
@@ -197,6 +203,10 @@
         border-left-color: #27ae60;
     }
     
+    .timeline-card.failed {
+        border-left-color: #e74c3c;
+    }
+    
     .timeline-card.cancelled {
         border-left-color: #95a5a6;
     }
@@ -236,6 +246,11 @@
     .card-status.sent {
         background: #d4edda;
         color: #155724;
+    }
+    
+    .card-status.failed {
+        background: #f8d7da;
+        color: #721c24;
     }
     
     .card-status.cancelled {
@@ -299,6 +314,15 @@
     
     .btn-cancel:hover {
         background: #c0392b;
+    }
+    
+    .btn-retry {
+        background: #f39c12;
+        color: white;
+    }
+    
+    .btn-retry:hover {
+        background: #e67e22;
     }
     
     /* Séparateur de date */
@@ -398,6 +422,10 @@
             <span class="number">{{ stats.sent }}</span>
             <span class="label">Envoyées</span>
         </div>
+        <div class="stat-item failed">
+            <span class="number">{{ stats.failed }}</span>
+            <span class="label">Échouées</span>
+        </div>
         <div class="stat-item cancelled">
             <span class="number">{{ stats.cancelled }}</span>
             <span class="label">Annulées</span>
@@ -418,9 +446,19 @@
     <a href="{{ url_for('followups.timeline', status='sent') }}" class="filter-tab {% if current_filter == 'sent' and not current_days and not filter_today %}active{% endif %}">
         ✓ Envoyées <span class="count">{{ stats.sent }}</span>
     </a>
+    <a href="{{ url_for('followups.timeline', status='failed') }}" class="filter-tab {% if current_filter == 'failed' and not current_days and not filter_today %}active{% endif %}">
+        ⚠ Échouées <span class="count">{{ stats.failed }}</span>
+    </a>
     <a href="{{ url_for('followups.timeline', status='cancelled') }}" class="filter-tab {% if current_filter == 'cancelled' and not current_days and not filter_today %}active{% endif %}">
         ✗ Annulées <span class="count">{{ stats.cancelled }}</span>
     </a>
+    {% if stats.failed > 0 %}
+    <form method="POST" action="{{ url_for('followups.retry_all_failed') }}" style="display: inline-block; margin-left: auto;" onsubmit="return confirm('Voulez-vous vraiment réessayer toutes les {{ stats.failed }} relances échouées ?');">
+        <button type="submit" class="filter-tab" style="cursor: pointer; border: 2px solid #e74c3c; background: #fff; color: #e74c3c; font-weight: 600;">
+            🔄 Tout réessayer
+        </button>
+    </form>
+    {% endif %}
 </div>
 
 <!-- Filtres par type de relance J+X -->
@@ -461,6 +499,7 @@
             <div class="timeline-marker {{ followup.status }}">
                 {% if followup.status == 'scheduled' %}⏱
                 {% elif followup.status == 'sent' %}✓
+                {% elif followup.status == 'failed' %}⚠
                 {% else %}✗{% endif %}
             </div>
             
@@ -486,6 +525,7 @@
                     <span class="card-status {{ followup.status }}">
                         {% if followup.status == 'scheduled' %}⏱ Planifiée
                         {% elif followup.status == 'sent' %}✓ Envoyée
+                        {% elif followup.status == 'failed' %}⚠ Échouée
                         {% else %}✗ Annulée{% endif %}
                     </span>
                 </div>
@@ -499,12 +539,23 @@
                         ✓ Envoyée: {{ followup.sent_at.strftime('%d/%m/%Y %H:%M') if followup.sent_at is not string else followup.sent_at }}
                     </span>
                     {% endif %}
+                    {% if followup.status == 'failed' and followup.processed_at %}
+                    <span class="card-meta-item">
+                        ⚠ Échec: {{ followup.processed_at.strftime('%d/%m/%Y %H:%M') if followup.processed_at is not string else followup.processed_at }}
+                    </span>
+                    {% endif %}
                     {% if followup.status == 'cancelled' and followup.cancelled_at %}
                     <span class="card-meta-item">
                         ✗ Annulée: {{ followup.cancelled_at.strftime('%d/%m/%Y %H:%M') if followup.cancelled_at is not string else followup.cancelled_at }}
                     </span>
                     {% endif %}
                 </div>
+                
+                {% if followup.status == 'failed' and followup.error_message %}
+                <div class="card-subject" style="background: #f8d7da; color: #721c24;">
+                    <strong>⚠ Erreur:</strong> {{ followup.error_message }}
+                </div>
+                {% endif %}
                 
                 {% if followup.subject or (followup.draft and followup.draft.subject) %}
                 <div class="card-subject">
@@ -523,6 +574,14 @@
                     <form method="POST" action="{{ url_for('followups.cancel_followup', followup_id=followup.id) }}" style="display: inline;">
                         <button type="submit" class="btn-small btn-cancel" onclick="return confirm('Êtes-vous sûr de vouloir annuler cette relance ?')">
                             ✗ Annuler
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    {% if followup.status == 'failed' %}
+                    <form method="POST" action="{{ url_for('followups.retry_followup', followup_id=followup.id) }}" style="display: inline;">
+                        <button type="submit" class="btn-small btn-retry" onclick="return confirm('Voulez-vous replanifier cette relance ?')">
+                            🔄 Réessayer
                         </button>
                     </form>
                     {% endif %}
