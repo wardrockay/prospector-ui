@@ -344,17 +344,20 @@
     <h2 style="margin-bottom: 20px;">✅ Emails envoyés</h2>
     
     <!-- Barre de recherche -->
-    <div class="search-container">
+    <form method="get" action="{{ url_for('history.history_list') }}" class="search-container">
         <input 
             type="text" 
-            id="emailSearchInput" 
+            name="search"
             class="search-input" 
-            placeholder="🔍 Rechercher par email (destinataire)..."
-            oninput="searchEmails()"
+            placeholder="🔍 Rechercher par email exact (ex: john@example.com)..."
+            value="{{ search_email }}"
         >
-        <button class="search-clear-btn" onclick="clearSearch()">✕ Effacer</button>
-        <span class="search-results-info" id="searchResultsInfo"></span>
-    </div>
+        <button type="submit" class="search-clear-btn" style="background: #3498db; color: white; border-color: #3498db;">🔍 Rechercher</button>
+        {% if search_email %}
+        <a href="{{ url_for('history.history_list', date=date_filter) }}" class="search-clear-btn">✕ Effacer</a>
+        <span class="search-results-info">Recherche: "{{ search_email }}"</span>
+        {% endif %}
+    </form>
     
     <!-- Filtre par date -->
     <div class="date-filter-container">

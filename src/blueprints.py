@@ -838,9 +838,10 @@ def history_list():
         cursor = request.args.get("cursor")
         page_num = int(request.args.get("page", "1"))
         
-        # Récupérer le filtre de date
+        # Récupérer le filtre de date et recherche
         date_filter = request.args.get("date", "all")
         custom_date = request.args.get("custom_date", "")
+        search_email = request.args.get("search", "").strip()
         
         # Calculer les dates de début et fin selon le filtre
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -868,7 +869,15 @@ def history_list():
                 date_end = None
         
         # Construire la requête de base
-        if date_start and date_end:
+        if search_email:
+            # Recherche par email exact (Firestore ne supporte pas LIKE)
+            base_query = (
+                db.collection(DRAFT_COLLECTION)
+                .where("status", "==", "sent")
+                .where("contact_email", "==", search_email)
+            )
+            query = base_query.order_by("sent_at", direction=firestore.Query.DESCENDING)
+        elif date_start and date_end:
             # Requête avec filtres de date
             base_query = (
                 db.collection(DRAFT_COLLECTION)
@@ -1008,6 +1017,7 @@ def history_list():
             stats=stats,
             date_filter=date_filter,
             custom_date=custom_date,
+            search_email=search_email,
             next_cursor=next_cursor,
             prev_cursor=prev_cursor,
             current_cursor=cursor,
