@@ -1867,6 +1867,16 @@ def prospects_list():
             # Date d'envoi (premier contact)
             data["sent_at"] = data["first_sent_at"]
             
+            # Récupérer les relances planifiées pour ce prospect
+            if data["id"]:
+                try:
+                    followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", data["id"]).where("status", "==", "scheduled")
+                    data["scheduled_followups"] = len(list(followups_ref.stream()))
+                except Exception:
+                    data["scheduled_followups"] = 0
+            else:
+                data["scheduled_followups"] = 0
+            
             # Stats globales
             if data["open_count"] > 0:
                 total_opened += 1
