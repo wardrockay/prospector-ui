@@ -432,16 +432,16 @@
                         {% elif prospect.open_count and prospect.open_count > 0 %}
                             <span class="badge badge-opened">👁️ {{ prospect.open_count }}x</span>
                         {% endif %}
-                        {% if prospect.scheduled_followups and prospect.scheduled_followups > 0 %}
-                            <span class="badge badge-followup">🔄 {{ prospect.scheduled_followups }} relance(s)</span>
+                        {% if prospect.followups_count and prospect.followups_count > 0 %}
+                            <span class="badge badge-followup">🔄 {{ prospect.followups_count }} relance(s)</span>
                         {% endif %}
                     </div>
                 </div>
                 
                 <div class="prospect-stats">
                     <span>📧 {{ prospect.total_emails or 1 }} email(s)</span>
-                    {% if prospect.sent_followups and prospect.sent_followups > 0 %}
-                        <span>🔄 {{ prospect.sent_followups }} relance(s) envoyée(s)</span>
+                    {% if prospect.followups_count and prospect.followups_count > 0 %}
+                        <span>🔄 {{ prospect.followups_count }} relance(s)</span>
                     {% endif %}
                 </div>
                 

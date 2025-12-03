@@ -252,6 +252,7 @@
     .status-sent { background-color: #d4edda; color: #155724; }
     .status-cancelled { background-color: #f8d7da; color: #721c24; }
     .status-error { background-color: #f8d7da; color: #721c24; }
+    .status-failed { background-color: #f8d7da; color: #721c24; }
     
     .btn-cancel-followup {
         background-color: #e74c3c;
@@ -516,36 +517,52 @@
                 <h3 style="display: flex; justify-content: space-between; align-items: center;">
                     <span>🔄 Détails des relances</span>
                     {% set scheduled_followups = followups|selectattr('status', 'equalto', 'scheduled')|list %}
-                    {% if scheduled_followups|length > 1 %}
-                    <form method="POST" action="{{ url_for('followups.cancel_all_followups', draft_id=draft.id) }}" style="margin: 0;">
-                        <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
-                        <button type="submit" class="btn-cancel-all" onclick="return confirm('Êtes-vous sûr de vouloir annuler TOUTES les relances planifiées ({{ scheduled_followups|length }}) ?')">
-                            ✗ Tout annuler
+                    {% if scheduled_followups|length > 0 %}
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn-cancel-all" style="background-color: #3498db;" onclick="showShiftModal()">
+                            📅 Décaler
                         </button>
-                    </form>
+                        {% if scheduled_followups|length > 1 %}
+                        <form method="POST" action="{{ url_for('followups.cancel_all_followups', draft_id=draft.id) }}" style="margin: 0;">
+                            <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
+                            <button type="submit" class="btn-cancel-all" onclick="return confirm('Êtes-vous sûr de vouloir annuler TOUTES les relances planifiées ({{ scheduled_followups|length }}) ?')">
+                                ✗ Tout annuler
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </h3>
                 <ul class="followup-list">
                     {% for followup in followups %}
                     <li class="followup-item">
-                        <div>
-                            <strong>Relance à J+{{ followup.business_days_after or followup.days_after_initial }}</strong>
-                            <br>
-                            <small style="color: #7f8c8d;">
-                                Prévue pour: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
-                            </small>
-                            {% if followup.status == 'cancelled' and followup.cancelled_at %}
-                            <br>
-                            <small style="color: #95a5a6;">
-                                Annulée le: {{ followup.cancelled_at.strftime('%d/%m/%Y %H:%M') if followup.cancelled_at is not string else followup.cancelled_at }}
-                            </small>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            {% if followup.status == 'scheduled' %}
+                            <input type="checkbox" class="followup-checkbox" value="{{ followup.id }}" 
+                                   style="width: 18px; height: 18px; cursor: pointer;">
+                            {% else %}
+                            <div style="width: 18px;"></div>
                             {% endif %}
+                            <div>
+                                <strong>Relance à J+{{ followup.business_days_after or followup.days_after_initial }}</strong>
+                                <br>
+                                <small style="color: #7f8c8d;">
+                                    Prévue pour: {{ followup.scheduled_for.strftime('%d/%m/%Y %H:%M') if followup.scheduled_for is not string else followup.scheduled_for }}
+                                </small>
+                                {% if followup.status == 'cancelled' and followup.cancelled_at %}
+                                <br>
+                                <small style="color: #95a5a6;">
+                                    Annulée le: {{ followup.cancelled_at.strftime('%d/%m/%Y %H:%M') if followup.cancelled_at is not string else followup.cancelled_at }}
+                                </small>
+                                {% endif %}
+                            </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="status status-{{ followup.status }}">
                                 {% if followup.status == 'scheduled' %}⏱ Planifiée
                                 {% elif followup.status == 'sent' %}✓ Envoyée
                                 {% elif followup.status == 'cancelled' %}✗ Annulée
+                                {% elif followup.status == 'failed' %}⚠ Échouée
                                 {% else %}{{ followup.status }}{% endif %}
                             </span>
                             {% if followup.status == 'scheduled' %}
@@ -553,6 +570,13 @@
                                 <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
                                 <button type="submit" class="btn-cancel-followup" onclick="return confirm('Êtes-vous sûr de vouloir annuler cette relance ?')">
                                     ✗ Annuler
+                                </button>
+                            </form>
+                            {% elif followup.status == 'failed' %}
+                            <form method="POST" action="{{ url_for('followups.retry_followup', followup_id=followup.id) }}" style="margin: 0;">
+                                <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
+                                <button type="submit" class="btn-cancel-followup" style="background-color: #f39c12;" onclick="return confirm('Voulez-vous replanifier cette relance ?')">
+                                    🔄 Réessayer
                                 </button>
                             </form>
                             {% endif %}
@@ -758,6 +782,37 @@
     </div>
 </div>
 
+<!-- Modal de décalage des relances -->
+<div id="shiftModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>📅 Décaler les relances</h3>
+        <p style="color: #666; margin-bottom: 20px;">Décalez les relances sélectionnées d'un certain nombre de <strong>jours ouvrés</strong> (saute weekends et jours fériés)</p>
+        
+        <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 10px;">
+                <input type="checkbox" id="selectAllFollowups" onchange="toggleAllFollowups(this.checked)">
+                <strong>Sélectionner toutes les relances planifiées</strong>
+            </label>
+            <div id="selectedCount" style="font-size: 13px; color: #7f8c8d;">
+                0 relance(s) sélectionnée(s)
+            </div>
+        </div>
+        
+        <label for="daysShift">Nombre de jours ouvrés à décaler :</label>
+        <input type="number" id="daysShift" placeholder="Ex: 3 (avancer) ou -2 (reculer)" 
+               style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; margin-bottom: 10px;">
+        <small style="color: #7f8c8d; display: block; margin-bottom: 20px;">
+            Nombre positif = avancer les dates | Nombre négatif = reculer les dates<br>
+            <strong>⚠️ Les weekends et jours fériés français sont automatiquement sautés</strong>
+        </small>
+        
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="hideShiftModal()">Annuler</button>
+            <button type="button" class="btn btn-success" onclick="shiftFollowups()">📅 Décaler</button>
+        </div>
+    </div>
+</div>
+
 <script>
 function showResendModal() {
     document.getElementById('resendModal').classList.add('active');
@@ -767,10 +822,92 @@ function hideResendModal() {
     document.getElementById('resendModal').classList.remove('active');
 }
 
-// Fermer le modal en cliquant à l'extérieur
+function showShiftModal() {
+    updateSelectedCount();
+    document.getElementById('shiftModal').classList.add('active');
+}
+
+function hideShiftModal() {
+    document.getElementById('shiftModal').classList.remove('active');
+}
+
+function toggleAllFollowups(checked) {
+    const checkboxes = document.querySelectorAll('.followup-checkbox');
+    checkboxes.forEach(cb => cb.checked = checked);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const selected = document.querySelectorAll('.followup-checkbox:checked');
+    document.getElementById('selectedCount').textContent = 
+        selected.length + ' relance(s) sélectionnée(s)';
+}
+
+// Mettre à jour le compteur quand on coche/décoche
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.followup-checkbox');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+});
+
+async function shiftFollowups() {
+    const selectedCheckboxes = document.querySelectorAll('.followup-checkbox:checked');
+    const daysShift = parseInt(document.getElementById('daysShift').value);
+    
+    if (selectedCheckboxes.length === 0) {
+        alert('Veuillez sélectionner au moins une relance à décaler');
+        return;
+    }
+    
+    if (!daysShift || daysShift === 0) {
+        alert('Veuillez entrer un nombre de jours valide (différent de 0)');
+        return;
+    }
+    
+    const followupIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+    
+    const confirmMsg = `Décaler ${followupIds.length} relance(s) de ${daysShift} jour(s) ouvré(s) ?\n(Les weekends et jours fériés seront sautés)`;
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('{{ config.AUTO_FOLLOWUP_URL }}/shift-followups', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                followup_ids: followupIds,
+                days_shift: daysShift
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(result.message || `✓ ${result.shifted_count} relances décalées avec succès`);
+            location.reload();
+        } else {
+            alert('Erreur: ' + (result.error || 'Échec du décalage'));
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur de connexion au serveur');
+    }
+}
+
+// Fermer les modals en cliquant à l'extérieur
 document.getElementById('resendModal').addEventListener('click', function(e) {
     if (e.target === this) {
         hideResendModal();
+    }
+});
+
+document.getElementById('shiftModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideShiftModal();
     }
 });
 </script>

@@ -834,7 +834,7 @@ def history_list():
         from datetime import timedelta
         
         # Pagination parameters
-        page_size = 50
+        page_size = 20
         cursor = request.args.get("cursor")
         page_num = int(request.args.get("page", "1"))
         
@@ -874,7 +874,7 @@ def history_list():
             base_query = (
                 db.collection(DRAFT_COLLECTION)
                 .where("status", "==", "sent")
-                .where("contact_email", "==", search_email)
+                .where("to", "==", search_email)
             )
             query = base_query.order_by("sent_at", direction=firestore.Query.DESCENDING)
         elif date_start and date_end:
@@ -1752,9 +1752,10 @@ prospects_bp = Blueprint("prospects", __name__, url_prefix="/prospects")
 
 @prospects_bp.route("/")
 def prospects_list():
-    """Show prospects list (grouped by email/prospect)."""
+    """Show prospects list (one line per unique email address)."""
     try:
         from datetime import timedelta
+        from collections import defaultdict
         
         # Récupérer le filtre de date
         date_filter = request.args.get("date", "all")
@@ -1774,65 +1775,110 @@ def prospects_list():
             date_start = today - timedelta(days=30)
             date_end = today + timedelta(days=1)
         
-        # Construire la requête - on prend les premiers emails envoyés (pas les followups)
+        # Récupérer TOUS les drafts envoyés (initiaux + followups)
         if date_start and date_end:
             sent_drafts_ref = (
                 db.collection(DRAFT_COLLECTION)
                 .where("status", "==", "sent")
-                .where("is_followup", "==", False)
                 .where("sent_at", ">=", date_start)
                 .where("sent_at", "<", date_end)
                 .order_by("sent_at", direction=firestore.Query.DESCENDING)
-                .limit(200)
             )
         else:
-            # Sans filtre is_followup pour éviter les problèmes d'index
             sent_drafts_ref = (
                 db.collection(DRAFT_COLLECTION)
                 .where("status", "==", "sent")
                 .order_by("sent_at", direction=firestore.Query.DESCENDING)
-                .limit(200)
+                .limit(500)
             )
         
-        prospects = []
-        total_opened = 0
-        total_bounced = 0
-        total_replied = 0
+        # Grouper par x_external_id (ID Pharow)
+        prospects_by_external_id = defaultdict(lambda: {
+            "emails_sent": [],
+            "open_count": 0,
+            "has_reply": False,
+            "has_bounce": False,
+            "first_sent_at": None,
+            "last_sent_at": None
+        })
         
         for doc in sent_drafts_ref.stream():
             draft_data = doc.to_dict()
+            draft_data["id"] = doc.id
+            external_id = draft_data.get("x_external_id", "")
             
-            # Filtrer les followups si pas de filtre de date
-            if not date_start and (draft_data.get("is_followup") or draft_data.get("followup_number", 0) > 0):
+            if not external_id:
                 continue
             
-            draft_data["id"] = doc.id
+            prospect = prospects_by_external_id[external_id]
             
-            # Récupérer les stats d'ouverture
+            # Stocker le draft
+            prospect["emails_sent"].append(draft_data)
+            
+            # Mettre à jour les infos globales (prendre du premier email si pas défini)
+            if not prospect.get("contact_name"):
+                prospect["contact_name"] = draft_data.get("contact_name", "")
+            if not prospect.get("partner_name"):
+                prospect["partner_name"] = draft_data.get("partner_name", "")
+            if not prospect.get("to"):
+                prospect["to"] = draft_data.get("to", "")
+            
+            # Dates
+            sent_at = draft_data.get("sent_at")
+            if sent_at:
+                if not prospect["first_sent_at"] or sent_at < prospect["first_sent_at"]:
+                    prospect["first_sent_at"] = sent_at
+                if not prospect["last_sent_at"] or sent_at > prospect["last_sent_at"]:
+                    prospect["last_sent_at"] = sent_at
+            
+            # Agréger les stats
+            if draft_data.get("has_reply"):
+                prospect["has_reply"] = True
+            if draft_data.get("has_bounce"):
+                prospect["has_bounce"] = True
+            
+            # Compter les ouvertures
             pixel_id = draft_data.get("pixel_id")
             if pixel_id:
                 pixel_doc = db.collection(PIXEL_COLLECTION).document(pixel_id).get()
                 if pixel_doc.exists:
                     pixel_data = pixel_doc.to_dict()
-                    draft_data["open_count"] = pixel_data.get("open_count", 0)
-                    if draft_data["open_count"] > 0:
-                        total_opened += 1
+                    prospect["open_count"] += pixel_data.get("open_count", 0)
+        
+        # Convertir en liste et calculer les stats
+        prospects = []
+        total_opened = 0
+        total_bounced = 0
+        total_replied = 0
+        
+        for external_id, data in prospects_by_external_id.items():
+            # Trier les emails par date
+            data["emails_sent"].sort(key=lambda x: x.get("sent_at") or datetime.min)
             
-            if draft_data.get("has_bounce"):
+            # Compter initial + followups
+            data["total_emails"] = len(data["emails_sent"])
+            data["initial_email"] = data["emails_sent"][0] if data["emails_sent"] else None
+            data["followups_count"] = data["total_emails"] - 1
+            
+            # Récupérer l'ID du premier email pour les liens
+            data["id"] = data["initial_email"]["id"] if data["initial_email"] else None
+            data["x_external_id"] = external_id
+            
+            # Date d'envoi (premier contact)
+            data["sent_at"] = data["first_sent_at"]
+            
+            # Stats globales
+            if data["open_count"] > 0:
+                total_opened += 1
+            if data["has_bounce"]:
                 total_bounced += 1
-            
-            if draft_data.get("has_reply"):
+            if data["has_reply"]:
                 total_replied += 1
             
-            # Compter les followups
-            followups_ref = db.collection(FOLLOWUP_COLLECTION).where("draft_id", "==", doc.id)
-            followups = list(followups_ref.stream())
-            draft_data["total_followups"] = len(followups)
-            draft_data["scheduled_followups"] = len([f for f in followups if f.to_dict().get("status") == "scheduled"])
-            draft_data["sent_followups"] = len([f for f in followups if f.to_dict().get("status") == "sent"])
-            draft_data["total_emails"] = 1 + draft_data["sent_followups"]
-            
-            prospects.append(draft_data)
+            prospects.append(data)
+        
+        # Trier par date du dernier email
+        prospects.sort(key=lambda x: x.get("last_sent_at") or datetime.min, reverse=True)
         
         total_prospects = len(prospects)
         open_rate = (total_opened / total_prospects * 100) if total_prospects > 0 else 0

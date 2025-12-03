@@ -336,7 +336,7 @@
                     <th>Sujet</th>
                     <th>Versions</th>
                     <th>Statut</th>
-                    <th>Réponse</th>
+                    <th>Étape</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -366,10 +366,10 @@
                         <span class="badge badge-{{ draft.status }}">{{ draft.status }}</span>
                     </td>
                     <td>
-                        {% if draft.has_reply %}
-                            <span style="color: #27ae60; font-weight: bold;">✓ Répondu</span>
+                        {% if draft.followup_number and draft.followup_number > 0 %}
+                            <span style="color: #f39c12; font-weight: bold;">📧 Relance {{ draft.followup_number }}</span>
                         {% else %}
-                            <span style="color: #95a5a6;">-</span>
+                            <span style="color: #3498db; font-weight: bold;">📩 Email initial</span>
                         {% endif %}
                     </td>
                     <td>

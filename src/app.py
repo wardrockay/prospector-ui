@@ -59,6 +59,18 @@ def create_app() -> Flask:
         html = md.markdown(text, extensions=MARKDOWN_EXTENSIONS)
         return Markup(html)
     
+    # Make config available in templates
+    @app.context_processor
+    def inject_config():
+        """Inject configuration into all templates."""
+        return {
+            "config": {
+                "AUTO_FOLLOWUP_URL": settings.services.auto_followup_url,
+                "DRAFT_CREATOR_URL": settings.services.draft_creator_url,
+                "MAIL_WRITER_URL": settings.services.mail_writer_url,
+            }
+        }
+    
     # Register blueprints
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp)
