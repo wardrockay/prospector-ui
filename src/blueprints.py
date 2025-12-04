@@ -245,18 +245,26 @@ def send_draft(draft_id: str):
                     if rejected_count > 0:
                         flash(f"{rejected_count} autre(s) version(s) automatiquement rejetée(s)", "info")
             
-            if AUTO_FOLLOWUP_URL:
-                try:
-                    followup_response = http_requests.post(
-                        f"{AUTO_FOLLOWUP_URL}/schedule-followups",
-                        json={"draft_id": draft_id},
-                        timeout=10
-                    )
-                    if followup_response.status_code == 200:
-                        followup_result = followup_response.json()
-                        flash(f"Relances planifiées: {followup_result.get('followups_created', 0)}", "info")
-                except Exception as e:
-                    print(f"Erreur lors de la planification des relances: {str(e)}")
+            # ⚠️ PROTECTION: Schedule followups only if this is NOT a followup draft itself
+            doc_after_send = doc_ref.get()
+            if doc_after_send.exists:
+                draft_after_data = doc_after_send.to_dict()
+                is_followup = draft_after_data.get("is_followup", False) or draft_after_data.get("followup_number", 0) > 0
+                
+                if is_followup:
+                    print(f"⚠️ [PROSPECTOR-UI /send] Draft {draft_id} is a FOLLOWUP (followup_number={draft_after_data.get('followup_number', 0)}), SKIPPING followup scheduling")
+                elif AUTO_FOLLOWUP_URL:
+                    try:
+                        followup_response = http_requests.post(
+                            f"{AUTO_FOLLOWUP_URL}/schedule-followups",
+                            json={"draft_id": draft_id},
+                            timeout=10
+                        )
+                        if followup_response.status_code == 200:
+                            followup_result = followup_response.json()
+                            flash(f"Relances planifiées: {followup_result.get('followups_created', 0)}", "info")
+                    except Exception as e:
+                        print(f"Erreur lors de la planification des relances: {str(e)}")
             
             return redirect(url_for("main.index"))
         else:
@@ -381,18 +389,26 @@ def change_email_and_send(draft_id: str):
                     if rejected_count > 0:
                         flash(f"{rejected_count} autre(s) version(s) automatiquement rejetée(s)", "info")
             
-            if AUTO_FOLLOWUP_URL:
-                try:
-                    followup_response = http_requests.post(
-                        f"{AUTO_FOLLOWUP_URL}/schedule-followups",
-                        json={"draft_id": draft_id},
-                        timeout=10
-                    )
-                    if followup_response.status_code == 200:
-                        followup_result = followup_response.json()
-                        flash(f"Relances planifiées: {followup_result.get('followups_created', 0)}", "info")
-                except Exception as e:
-                    print(f"Erreur lors de la planification des relances: {str(e)}")
+            # ⚠️ PROTECTION: Schedule followups only if this is NOT a followup draft itself
+            doc_after_send = doc_ref.get()
+            if doc_after_send.exists:
+                draft_after_data = doc_after_send.to_dict()
+                is_followup = draft_after_data.get("is_followup", False) or draft_after_data.get("followup_number", 0) > 0
+                
+                if is_followup:
+                    print(f"⚠️ [PROSPECTOR-UI /resend-to-another] Draft {draft_id} is a FOLLOWUP (followup_number={draft_after_data.get('followup_number', 0)}), SKIPPING followup scheduling")
+                elif AUTO_FOLLOWUP_URL:
+                    try:
+                        followup_response = http_requests.post(
+                            f"{AUTO_FOLLOWUP_URL}/schedule-followups",
+                            json={"draft_id": draft_id},
+                            timeout=10
+                        )
+                        if followup_response.status_code == 200:
+                            followup_result = followup_response.json()
+                            flash(f"Relances planifiées: {followup_result.get('followups_created', 0)}", "info")
+                    except Exception as e:
+                        print(f"Erreur lors de la planification des relances: {str(e)}")
             
             return redirect(url_for("main.index"))
         else:
@@ -461,6 +477,18 @@ def edit_draft(draft_id: str):
             "manually_edited": True,
             "edited_from_draft_id": draft_id
         }
+        
+        # ⚠️ CRITICAL: Preserve followup fields if this is a followup draft
+        if original_data.get("is_followup") or original_data.get("followup_number", 0) > 0:
+            new_draft_data["is_followup"] = True
+            new_draft_data["followup_number"] = original_data.get("followup_number", 0)
+            # Also preserve thread info for followups
+            if original_data.get("reply_to_message_id"):
+                new_draft_data["reply_to_message_id"] = original_data["reply_to_message_id"]
+            if original_data.get("reply_to_thread_id"):
+                new_draft_data["reply_to_thread_id"] = original_data["reply_to_thread_id"]
+            if original_data.get("original_subject"):
+                new_draft_data["original_subject"] = original_data["original_subject"]
         
         if "contact_info" in original_data:
             new_draft_data["contact_info"] = original_data["contact_info"]
