@@ -477,9 +477,14 @@
                         {% endif %}
                     </dd>
                     
-                    {% if draft.gmail_message_id %}
-                    <dt>Gmail Message ID :</dt>
-                    <dd><code style="font-size: 11px;">{{ draft.gmail_message_id }}</code></dd>
+                    {% if draft.message_id %}
+                    <dt>Message ID (long)</dt>
+                    <dd><code style="font-size: 11px;">{{ draft.message_id }}</code></dd>
+                    {% endif %}
+                    
+                    {% if draft.gmail_api_message_id %}
+                    <dt>Gmail API ID (court)</dt>
+                    <dd><code style="font-size: 11px;">{{ draft.gmail_api_message_id }}</code></dd>
                     {% endif %}
                     
                     {% if draft.gmail_thread_id %}
