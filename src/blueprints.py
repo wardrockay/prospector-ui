@@ -1097,11 +1097,11 @@ def sent_draft_detail(draft_id: str):
         
         # Récupérer les messages du thread depuis Gmail si has_reply ou si thread_id existe
         thread_messages = []
-        if draft_data.get("gmail_thread_id") and (draft_data.get("has_reply") or draft_data.get("has_bounce")):
+        reply_info = {}
+        
+        if draft_data.get("has_reply"):
             try:
-                # Appeler directement l'endpoint GET /get-thread/<thread_id>
-                thread_id = draft_data.get("gmail_thread_id")
-                
+                # Nouvelle approche : récupérer TOUTES les conversations liées au draft
                 try:
                     id_token = get_id_token(GMAIL_NOTIFIER_URL)
                     headers = {
@@ -1111,26 +1111,49 @@ def sent_draft_detail(draft_id: str):
                 except Exception:
                     headers = {"Content-Type": "application/json"}
                 
-                response = http_requests.get(
-                    f"{GMAIL_NOTIFIER_URL}/get-thread/{thread_id}",
+                # Récupérer d'abord les infos des réponses
+                replies_response = http_requests.get(
+                    f"{GMAIL_NOTIFIER_URL}/get-draft-replies/{doc.id}",
                     headers=headers,
                     timeout=30
                 )
                 
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get("status") == "ok":
-                        thread_messages = result.get("messages", [])
-                        print(f"[INFO] Thread récupéré depuis Gmail: {len(thread_messages)} messages")
+                if replies_response.status_code == 200:
+                    reply_result = replies_response.json()
+                    if reply_result.get("status") == "ok":
+                        reply_info = {
+                            'total_replies': reply_result.get('total_replies', 0),
+                            'replies': reply_result.get('replies', [])
+                        }
+                        print(f"[INFO] {reply_info['total_replies']} réponse(s) trouvée(s)")
+                
+                # Récupérer toutes les conversations (thread original + threads des réponses)
+                conversations_response = http_requests.get(
+                    f"{GMAIL_NOTIFIER_URL}/get-draft-conversations/{doc.id}",
+                    headers=headers,
+                    timeout=30
+                )
+                
+                if conversations_response.status_code == 200:
+                    conv_result = conversations_response.json()
+                    if conv_result.get("status") == "ok":
+                        # Fusionner tous les messages de toutes les conversations
+                        for conversation in conv_result.get('conversations', []):
+                            thread_messages.extend(conversation.get('messages', []))
+                        
+                        # Trier par timestamp
+                        thread_messages.sort(key=lambda m: m.get('timestamp', 0))
+                        
+                        print(f"[INFO] {len(thread_messages)} messages récupérés depuis {conv_result.get('total_threads', 0)} thread(s)")
                     else:
-                        print(f"[WARNING] Erreur dans la réponse: {result}")
+                        print(f"[WARNING] Erreur dans la réponse: {conv_result}")
                 else:
-                    print(f"[WARNING] Erreur HTTP {response.status_code} lors de la récupération du thread")
+                    print(f"[WARNING] Erreur HTTP {conversations_response.status_code}")
                     
             except Exception as fetch_error:
                 print(f"[WARNING] Impossible de récupérer le thread depuis Gmail: {fetch_error}")
         
-        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups, sent_followup_messages=sent_followup_messages, thread_messages=thread_messages, open_history=open_history)
+        return render_template("sent_draft_detail.html", draft=draft_data, followups=followups, sent_followup_messages=sent_followup_messages, thread_messages=thread_messages, reply_info=reply_info, open_history=open_history)
     
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
