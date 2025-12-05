@@ -250,6 +250,7 @@
     
     .status-scheduled { background-color: #fff3cd; color: #856404; }
     .status-sent { background-color: #d4edda; color: #155724; }
+    .status-done { background-color: #d4edda; color: #155724; }
     .status-cancelled { background-color: #f8d7da; color: #721c24; }
     .status-error { background-color: #f8d7da; color: #721c24; }
     .status-failed { background-color: #f8d7da; color: #721c24; }
@@ -348,6 +349,31 @@
         justify-content: flex-end;
     }
     
+    .copy-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 8px;
+        margin-left: 8px;
+        color: #3498db;
+        font-size: 14px;
+        transition: all 0.2s;
+        border-radius: 4px;
+    }
+    
+    .copy-btn:hover {
+        background-color: #e3f2fd;
+        color: #2980b9;
+    }
+    
+    .copy-btn:active {
+        transform: scale(0.95);
+    }
+    
+    .copy-btn.copied {
+        color: #27ae60;
+    }
+    
     .action-buttons {
         display: flex;
         gap: 10px;
@@ -362,7 +388,14 @@
     <div class="draft-header">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h2>📧 Détails du mail envoyé</h2>
-            <span class="badge badge-sent">Envoyé</span>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                {% if draft.is_followup or (draft.followup_number and draft.followup_number > 0) %}
+                <span class="badge" style="background-color: #9b59b6; color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 600;">
+                    🔄 Relance {{ draft.business_days_after or draft.days_after_initial or draft.followup_number }}
+                </span>
+                {% endif %}
+                <span class="badge badge-sent">Envoyé</span>
+            </div>
         </div>
     </div>
     
@@ -512,7 +545,17 @@
                     {% endif %}
                     
                     <dt>ID Firestore :</dt>
-                    <dd><code style="font-size: 11px;">{{ draft.id }}</code></dd>
+                    <dd>
+                        <a href="https://console.cloud.google.com/firestore/databases/-default-/data/panel/email_drafts/{{ draft.id }}" 
+                           target="_blank" 
+                           rel="noopener noreferrer" 
+                           style="color: #3498db; text-decoration: none;">
+                            <code style="font-size: 11px;">{{ draft.id }}</code>
+                        </a>
+                        <button class="copy-btn" onclick="copyToClipboard('{{ draft.id }}', this)" title="Copier l'ID">
+                            📋
+                        </button>
+                    </dd>
                 </dl>
             </div>
             
@@ -566,6 +609,7 @@
                             <span class="status status-{{ followup.status }}">
                                 {% if followup.status == 'scheduled' %}⏱ Planifiée
                                 {% elif followup.status == 'sent' %}✓ Envoyée
+                                {% elif followup.status == 'done' %}✓ Envoyée
                                 {% elif followup.status == 'cancelled' %}✗ Annulée
                                 {% elif followup.status == 'failed' %}⚠ Échouée
                                 {% else %}{{ followup.status }}{% endif %}
@@ -577,6 +621,12 @@
                                     ✗ Annuler
                                 </button>
                             </form>
+                            {% elif followup.status == 'done' and followup.initial_draft_id and followup.followup_number %}
+                            <a href="{{ url_for('history.find_followup_draft', initial_draft_id=followup.initial_draft_id, followup_number=followup.followup_number) }}" 
+                               class="btn-cancel-followup" 
+                               style="background-color: #27ae60; text-decoration: none; display: inline-block;">
+                                📧 Voir le draft
+                            </a>
                             {% elif followup.status == 'failed' %}
                             <form method="POST" action="{{ url_for('followups.retry_followup', followup_id=followup.id) }}" style="margin: 0;">
                                 <input type="hidden" name="next" value="{{ url_for('history.sent_draft_detail', draft_id=draft.id) }}">
@@ -715,7 +765,7 @@
                         {% for followup_msg in sent_followup_messages %}
                         <div class="message followup">
                             <div class="message-header">
-                                <span class="message-type followup">Relance J+{{ followup_msg.business_days_after or followup_msg.days_after_initial }}</span>
+                                <span class="message-type followup">Relance {{ followup_msg.business_days_after or followup_msg.days_after_initial }}</span>
                                 <span class="message-date">
                                     {% if followup_msg.sent_at %}
                                         {{ followup_msg.sent_at.strftime('%d/%m/%Y %H:%M') if followup_msg.sent_at is not string else followup_msg.sent_at }}
@@ -852,6 +902,24 @@
 </div>
 
 <script>
+function copyToClipboard(text, button) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Feedback visuel : changer l'icône temporairement
+        const originalIcon = button.innerHTML;
+        button.innerHTML = '✓';
+        button.classList.add('copied');
+        
+        // Remettre l'icône d'origine après 2 secondes
+        setTimeout(function() {
+            button.innerHTML = originalIcon;
+            button.classList.remove('copied');
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Erreur lors de la copie:', err);
+        alert('Erreur lors de la copie dans le presse-papier');
+    });
+}
+
 function showResendModal() {
     document.getElementById('resendModal').classList.add('active');
 }

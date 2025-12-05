@@ -1212,6 +1212,30 @@ def fetch_thread(draft_id: str):
     return redirect(url_for("history.sent_draft_detail", draft_id=draft_id))
 
 
+@history_bp.route("/find-followup-draft/<initial_draft_id>/<int:followup_number>")
+def find_followup_draft(initial_draft_id: str, followup_number: int):
+    """Find and redirect to the followup draft based on initial_draft_id and followup_number."""
+    try:
+        # Rechercher le draft de relance dans Firestore
+        drafts_ref = db.collection(DRAFT_COLLECTION) \
+            .where("initial_draft_id", "==", initial_draft_id) \
+            .where("followup_number", "==", followup_number) \
+            .limit(1)
+        
+        docs = list(drafts_ref.stream())
+        
+        if not docs:
+            flash(f"Draft de relance introuvable (initial_draft_id={initial_draft_id}, followup_number={followup_number})", "error")
+            return redirect(url_for("history.sent_draft_detail", draft_id=initial_draft_id))
+        
+        followup_draft_id = docs[0].id
+        return redirect(url_for("history.sent_draft_detail", draft_id=followup_draft_id))
+        
+    except Exception as e:
+        flash(f"Erreur lors de la recherche du draft de relance: {str(e)}", "error")
+        return redirect(url_for("history.history_list"))
+
+
 @history_bp.route("/resend-bounced/<draft_id>", methods=["POST"])
 def resend_bounced_email(draft_id: str):
     """Create a new draft with a new address for a bounced email."""

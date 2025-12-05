@@ -428,7 +428,14 @@
                             <span class="bounce-indicator">⚠️ BOUNCE</span>
                         {% endif %}
                     </td>
-                    <td>{{ draft.subject }}</td>
+                    <td>
+                        {{ draft.subject }}
+                        {% if draft.is_followup or (draft.followup_number and draft.followup_number > 0) %}
+                            <br><span style="background-color: #9b59b6; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-top: 4px; display: inline-block;">
+                                🔄 Relance {{ draft.business_days_after or draft.days_after_initial or draft.followup_number }}
+                            </span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if draft.open_count and draft.open_count > 0 %}
                             <span style="color: #27ae60; font-weight: bold;">
