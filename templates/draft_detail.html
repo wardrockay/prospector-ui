@@ -598,8 +598,8 @@
         
         switch(e.key.toLowerCase()) {
             case 'a':
-                // Approuver/Envoyer
-                showConfirm();
+                // Approuver/Envoyer directement
+                document.querySelector('form[action*="send_draft"]').submit();
                 break;
             case 'r':
                 // Rejeter

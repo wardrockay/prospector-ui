@@ -393,6 +393,13 @@
                 <span class="badge" style="background-color: #9b59b6; color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 600;">
                     🔄 Relance {{ draft.business_days_after or draft.days_after_initial or draft.followup_number }}
                 </span>
+                {% if draft.initial_draft_id %}
+                <a href="{{ url_for('history.sent_draft_detail', draft_id=draft.initial_draft_id) }}" 
+                   class="btn-view-initial" 
+                   style="background-color: #3498db; color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+                    ⬅️ Voir le mail initial
+                </a>
+                {% endif %}
                 {% endif %}
                 <span class="badge badge-sent">Envoyé</span>
             </div>
